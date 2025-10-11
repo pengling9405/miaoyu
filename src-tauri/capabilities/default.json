@@ -1,0 +1,16 @@
+{
+	"$schema": "../gen/schemas/desktop-schema.json",
+	"identifier": "default",
+	"description": "Capability for the main window",
+	"windows": ["*"],
+	"permissions": [
+		"core:default",
+		"opener:default",
+		"store:default",
+		"core:window:allow-close",
+		"autostart:allow-enable",
+		"autostart:allow-disable",
+		"autostart:allow-is-enabled",
+		"clipboard-manager:allow-write-text"
+	]
+}
