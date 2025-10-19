@@ -138,7 +138,7 @@ bun run tauri dev
 ### 构建生产安装包
 
 ```bash
-bun run tauri build
+bun run tauri:prod build
 ```
 
 ---

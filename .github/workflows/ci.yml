@@ -99,8 +99,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.rust == 'true'
-    env:
-      TAURI_CONFIG: src-tauri/tauri.ci.conf.json
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -118,8 +116,6 @@ jobs:
     runs-on: macos-latest
     needs: changes
     if: needs.changes.outputs.rust == 'true'
-    env:
-      TAURI_CONFIG: src-tauri/tauri.ci.conf.json
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

@@ -92,7 +92,7 @@ jobs:
         run: bun run check-models
 
       - name: Build Tauri bundle
-        run: bun run tauri build
+        run: bun run tauri:prod build
 
       - name: Upload bundle
         uses: actions/upload-artifact@v4
