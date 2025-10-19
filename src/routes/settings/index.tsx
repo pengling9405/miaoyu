@@ -51,20 +51,12 @@ function RouteComponent() {
 		AUDIO_FLOW_PANEL_POSITION_DEFAULT;
 
 	// Generate unique IDs for form fields
-	const appIdFieldId = useId();
-	const accessTokenFieldId = useId();
 	const apiKeyFieldId = useId();
 	const systemPromptFieldId = useId();
 
 	// 开机启动
 	const [autostartEnabled, setAutostartEnabled] = useState(false);
 	const [isLoadingAutostart, setIsLoadingAutostart] = useState(true);
-
-	// ASR 配置
-	const [asrAppId, setAsrAppId] = useState(settingsQuery.data?.asrAppId ?? "");
-	const [asrAccessToken, setAsrAccessToken] = useState(
-		settingsQuery.data?.asrAccessToken ?? "",
-	);
 
 	// LLM 配置
 	const [llmApiKey, setLlmApiKey] = useState(
@@ -76,9 +68,6 @@ function RouteComponent() {
 
 	// 同步从 store 读取的值
 	useEffect(() => {
-		if (settingsQuery.data?.asrAppId) setAsrAppId(settingsQuery.data.asrAppId);
-		if (settingsQuery.data?.asrAccessToken)
-			setAsrAccessToken(settingsQuery.data.asrAccessToken);
 		if (settingsQuery.data?.llmApiKey)
 			setLlmApiKey(settingsQuery.data.llmApiKey);
 		// 系统提示词：使用 store 中的值，如果没有则使用默认值
@@ -119,13 +108,6 @@ function RouteComponent() {
 		void events.audioFlowPanelPositionChanged
 			.emit({ position: value })
 			.catch(() => {});
-	};
-
-	const updateAsrConfig = async () => {
-		await settingsQuery.set({
-			asrAppId: asrAppId || null,
-			asrAccessToken: asrAccessToken || null,
-		});
 	};
 
 	const updateLlmConfig = async () => {
@@ -301,56 +283,6 @@ function RouteComponent() {
 								</div>
 							}
 						/>
-					</div>
-				</section>
-
-				{/* 语音识别大模型 */}
-				<section className="space-y-2">
-					<h2 className="text-base font-medium">语音识别大模型</h2>
-					<div className="rounded-2xl border border-border bg-card shadow-sm p-2.5">
-						<div className="space-y-1 mb-4">
-							<h3 className="text-sm font-medium">豆包语音大模型 API</h3>
-							<p className="text-sm text-muted-foreground">
-								使用豆包大模型进行录音文件极速版识别。
-							</p>
-						</div>
-						<div className="space-y-2">
-							<div className="space-y-1.5">
-								<Label htmlFor={appIdFieldId} className="text-sm">
-									App ID
-								</Label>
-								<Input
-									id={appIdFieldId}
-									name="app_id"
-									value={asrAppId}
-									onChange={(e) => setAsrAppId(e.target.value)}
-									placeholder="火山引擎控制台获取的 APP ID"
-									className="h-9"
-								/>
-							</div>
-							<div className="space-y-1.5">
-								<Label htmlFor={accessTokenFieldId} className="text-sm">
-									Access Token
-								</Label>
-								<Input
-									id={accessTokenFieldId}
-									name="access_token"
-									type="password"
-									value={asrAccessToken}
-									onChange={(e) => setAsrAccessToken(e.target.value)}
-									placeholder="火山引擎控制台获取的 Access Token"
-									className="h-9"
-								/>
-							</div>
-							<div className="flex justify-end pt-2">
-								<button
-									onClick={updateAsrConfig}
-									className="px-2.5 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-								>
-									保存
-								</button>
-							</div>
-						</div>
 					</div>
 				</section>
 

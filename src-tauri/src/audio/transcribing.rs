@@ -1,36 +1,27 @@
+use std::{
+    io::Cursor,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
 use anyhow::{anyhow, bail, Context, Result};
-use base64::engine::general_purpose::STANDARD as Base64;
-use base64::Engine;
-use serde::{Deserialize, Serialize};
+use once_cell::sync::OnceCell;
+use serde::Serialize;
 use specta::Type;
-use tauri::{AppHandle, Wry};
-use uuid::Uuid;
+use tauri::{path::BaseDirectory, AppHandle, Manager, Wry};
+use tokio::sync::Mutex;
+use tracing::{debug, warn};
 
-use crate::settings::SettingsStore;
+use sherpa_rs::{
+    paraformer::{ParaformerConfig, ParaformerRecognizer},
+    punctuate::{Punctuation, PunctuationConfig},
+    silero_vad::{SileroVad, SileroVadConfig},
+};
 
-const AUC_API_URL: &str = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash";
-
-/// 获取火山引擎配置
-/// 优先级：用户设置 > 运行时环境变量 > 编译时默认值
-fn get_volcengine_config(settings: &Option<SettingsStore>) -> Result<(String, String)> {
-    // App ID
-    let app_id = settings
-        .as_ref()
-        .and_then(|s| s.asr_app_id.clone())
-        .or_else(|| std::env::var("VOLCENGINE_APP_ID").ok())
-        .or_else(|| option_env!("VOLCENGINE_APP_ID").map(String::from))
-        .ok_or_else(|| anyhow::anyhow!("未配置火山引擎 App ID，请在设置中配置"))?;
-
-    // Access Token
-    let access_token = settings
-        .as_ref()
-        .and_then(|s| s.asr_access_token.clone())
-        .or_else(|| std::env::var("VOLCENGINE_ACCESS_TOKEN").ok())
-        .or_else(|| option_env!("VOLCENGINE_ACCESS_TOKEN").map(String::from))
-        .ok_or_else(|| anyhow::anyhow!("未配置火山引擎 Access Token，请在设置中配置"))?;
-
-    Ok((app_id, access_token))
-}
+const TARGET_SAMPLE_RATE: u32 = 16_000;
+const VAD_WINDOW_SIZE: usize = 512;
+const VAD_BUFFER_DURATION: f32 = 60.0 * 10.0;
+const VAD_PADDING_SECONDS: u32 = 3;
 
 #[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -48,39 +39,32 @@ pub struct TranscriptionUtterance {
     pub end_time: u32,
 }
 
-#[derive(Debug, Deserialize)]
-struct VolcRecognizeResponse {
-    #[serde(default)]
-    audio_info: Option<VolcAudioInfo>,
-    #[serde(default)]
-    result: Option<VolcResult>,
+#[derive(Debug)]
+struct PreparedAudio {
+    waveform: Vec<f32>,
+    duration_ms: u32,
 }
 
-#[derive(Debug, Deserialize)]
-struct VolcAudioInfo {
-    #[serde(default)]
-    duration: Option<u64>,
+#[derive(Debug, Clone)]
+struct Segment {
+    start_sample: usize,
+    samples: Vec<f32>,
 }
 
-#[derive(Debug, Deserialize)]
-struct VolcResult {
-    #[serde(default)]
-    text: Option<String>,
-    #[serde(default)]
-    utterances: Option<Vec<VolcUtterance>>,
-    #[serde(default)]
-    additions: Option<serde_json::Map<String, serde_json::Value>>,
+#[derive(Debug, Clone)]
+struct RecognizedSegment {
+    text: String,
+    start_ms: u32,
+    end_ms: u32,
 }
 
-#[derive(Debug, Deserialize)]
-struct VolcUtterance {
-    #[serde(default)]
-    end_time: Option<u64>,
-    #[serde(default)]
-    start_time: Option<u64>,
-    #[serde(default)]
-    text: Option<String>,
+struct LocalSherpa {
+    recognizer: Mutex<ParaformerRecognizer>,
+    punctuator: Mutex<Punctuation>,
+    vad_model_path: String,
 }
+
+static LOCAL_SHERPA: OnceCell<Arc<LocalSherpa>> = OnceCell::new();
 
 pub struct AudioTranscribing;
 
@@ -89,128 +73,347 @@ impl AudioTranscribing {
         app: &AppHandle<Wry>,
         wav_data: Vec<u8>,
     ) -> Result<TranscriptionResult> {
-        // 读取用户配置或环境变量
-        let settings = SettingsStore::get(app).ok().flatten();
-        let (app_id, access_token) = get_volcengine_config(&settings)?;
+        let service = LocalSherpa::instance(app)?;
+        service.transcribe(wav_data).await
+    }
+}
 
-        let audio = Base64.encode(wav_data);
-        let request_id = Uuid::new_v4().to_string();
+impl LocalSherpa {
+    fn instance(app: &AppHandle<Wry>) -> Result<Arc<Self>> {
+        LOCAL_SHERPA
+            .get_or_try_init(|| {
+                let svc = Self::create(app)?;
+                Ok(Arc::new(svc))
+            })
+            .map(Arc::clone)
+    }
 
-        let client = reqwest::Client::new();
-
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(
-            "X-Api-App-Key",
-            reqwest::header::HeaderValue::from_str(&app_id).context("无效的 X-Api-App-Key")?,
-        );
-        headers.insert(
-            "X-Api-Access-Key",
-            reqwest::header::HeaderValue::from_str(&access_token)
-                .context("无效的 X-Api-Access-Key")?,
-        );
-        headers.insert(
-            "X-Api-Resource-Id",
-            reqwest::header::HeaderValue::from_static("volc.bigasr.auc_turbo"),
-        );
-        headers.insert(
-            "X-Api-Request-Id",
-            reqwest::header::HeaderValue::from_str(&request_id)
-                .context("无效的 X-Api-Request-Id")?,
-        );
-        headers.insert(
-            "X-Api-Sequence",
-            reqwest::header::HeaderValue::from_static("-1"),
-        );
-        headers.insert(
-            reqwest::header::CONTENT_TYPE,
-            reqwest::header::HeaderValue::from_static("application/json"),
-        );
-
-        let body = serde_json::json!({
-            "user": { "uid": app_id },
-            "audio": { "data": audio },
-            "request": { "model_name": "bigmodel" },
-        });
-
-        let response = client
-            .post(AUC_API_URL)
-            .headers(headers)
-            .json(&body)
-            .send()
-            .await
-            .context("调用语音识别服务失败")?;
-
-        let log_id = response
-            .headers()
-            .get("X-Tt-Logid")
-            .and_then(|value| value.to_str().ok())
-            .map(|value| value.to_string());
-        let status_header = response
-            .headers()
-            .get("X-Api-Status-Code")
-            .and_then(|value| value.to_str().ok())
-            .map(|value| value.to_string())
-            .unwrap_or_else(|| "未返回状态码".to_string());
-
-        let status = response.status();
-        let payload: VolcRecognizeResponse =
-            response.json().await.context("解析语音识别响应失败")?;
-
-        if status != reqwest::StatusCode::OK || status_header != "20000000" {
-            tracing::error!(
-                target = "miaoyu_audio",
-                ?status,
-                status_header = status_header.as_str(),
-                log_id,
-                response = ?payload,
-                "语音识别接口返回错误"
-            );
-            bail!("语音识别失败，请稍后重试");
+    async fn transcribe(&self, wav_data: Vec<u8>) -> Result<TranscriptionResult> {
+        let prepared = self.prepare_audio(&wav_data)?;
+        if prepared.waveform.is_empty() {
+            bail!("录音数据为空");
         }
 
-        let mut result = payload
-            .result
-            .ok_or_else(|| anyhow!("语音识别响应缺少结果字段"))?;
+        let segments = self.run_vad(&prepared.waveform)?;
+        debug!(
+            target = "miaoyu_audio",
+            segment_count = segments.len(),
+            "VAD 检测完成"
+        );
 
-        let text = result.text.take().unwrap_or_default();
-        let utterances = result
-            .utterances
-            .take()
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|utterance| {
-                let text = utterance.text.unwrap_or_default();
-                let start_time = u32::try_from(utterance.start_time?).ok()?;
-                let end_time = u32::try_from(utterance.end_time?).ok()?;
-                Some(TranscriptionUtterance {
-                    text,
-                    start_time,
-                    end_time,
-                })
+        let recognized = self
+            .recognize_segments(segments, &prepared.waveform)
+            .await?;
+
+        let utterances: Vec<TranscriptionUtterance> = recognized
+            .iter()
+            .map(|segment| TranscriptionUtterance {
+                text: segment.text.clone(),
+                start_time: segment.start_ms,
+                end_time: segment.end_ms,
             })
-            .collect::<Vec<_>>();
+            .collect();
 
-        let duration_ms_raw = payload
-            .audio_info
-            .and_then(|info| info.duration)
-            .or_else(|| {
-                result
-                    .additions
-                    .as_mut()
-                    .and_then(|map| map.remove("duration"))
-                    .and_then(|value| match value {
-                        serde_json::Value::Number(number) => number.as_u64(),
-                        serde_json::Value::String(text) => text.parse::<u64>().ok(),
-                        _ => None,
-                    })
-            });
+        let text = recognized
+            .iter()
+            .map(|segment| segment.text.clone())
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
 
-        let duration_ms = duration_ms_raw.and_then(|value| u32::try_from(value).ok());
+        if utterances.is_empty() {
+            bail!("未检测到语音，请检查麦克风是否正常并在录音时保持发声");
+        }
 
         Ok(TranscriptionResult {
             text,
-            duration_ms,
+            duration_ms: Some(prepared.duration_ms),
             utterances,
         })
     }
+
+    fn create(app: &AppHandle<Wry>) -> Result<Self> {
+        let asr_model = resolve_model_path(app, "models/asr/model.int8.onnx")
+            .context("未找到 ASR 模型文件 models/asr/model.int8.onnx")?;
+        let tokens = resolve_model_path(app, "models/asr/tokens.txt")
+            .context("未找到 ASR 词表文件 models/asr/tokens.txt")?;
+        let vad_model = resolve_model_path(app, "models/vad/silero_vad.onnx")
+            .or_else(|_| resolve_model_path(app, "models/vad/model.onnx"))
+            .context("未找到 VAD 模型文件（期望 models/vad/silero_vad.onnx 或 model.onnx）")?;
+        let punc_model = resolve_model_path(app, "models/punc/model.onnx")
+            .context("未找到标点模型文件 models/punc/model.onnx")?;
+
+        debug!(
+            target = "miaoyu_audio",
+            asr_model = %asr_model.display(),
+            tokens = %tokens.display(),
+            vad_model = %vad_model.display(),
+            punc_model = %punc_model.display(),
+            "加载本地语音模型"
+        );
+
+        let recognizer_config = ParaformerConfig {
+            model: asr_model.to_string_lossy().to_string(),
+            tokens: tokens.to_string_lossy().to_string(),
+            provider: Some(sherpa_rs::get_default_provider()),
+            num_threads: Some(2),
+            ..Default::default()
+        };
+        let recognizer = ParaformerRecognizer::new(recognizer_config)
+            .map_err(|err| anyhow!("创建 ASR 识别器失败: {err}"))?;
+
+        let punctuator_config = PunctuationConfig {
+            model: punc_model.to_string_lossy().to_string(),
+            num_threads: Some(2),
+            ..Default::default()
+        };
+        let punctuator = Punctuation::new(punctuator_config)
+            .map_err(|err| anyhow!("加载标点模型失败: {err}"))?;
+
+        Ok(Self {
+            recognizer: Mutex::new(recognizer),
+            punctuator: Mutex::new(punctuator),
+            vad_model_path: vad_model.to_string_lossy().to_string(),
+        })
+    }
+
+    fn prepare_audio(&self, wav_data: &[u8]) -> Result<PreparedAudio> {
+        let cursor = Cursor::new(wav_data);
+        let mut reader =
+            hound::WavReader::new(cursor).context("解析录音 WAV 数据失败，请稍后重试")?;
+        let spec = reader.spec();
+
+        if spec.channels == 0 {
+            bail!("录音通道数无效");
+        }
+
+        let sample_rate = spec.sample_rate;
+        if sample_rate == 0 {
+            bail!("录音采样率无效");
+        }
+
+        let channels = spec.channels as usize;
+        let mut samples = Vec::new();
+        for sample in reader.samples::<i16>() {
+            samples.push(sample.context("读取音频样本失败")? as f32 / i16::MAX as f32);
+        }
+
+        let mono: Vec<f32> = if channels == 1 {
+            samples
+        } else {
+            samples
+                .chunks(channels)
+                .map(|frame| frame.iter().copied().sum::<f32>() / channels as f32)
+                .collect()
+        };
+
+        let duration_ms = ((mono.len() as f64) / (sample_rate as f64) * 1000.0)
+            .round()
+            .clamp(0.0, u32::MAX as f64) as u32;
+
+        let waveform = if sample_rate == TARGET_SAMPLE_RATE {
+            mono
+        } else {
+            resample_linear(&mono, sample_rate, TARGET_SAMPLE_RATE)
+        };
+
+        Ok(PreparedAudio {
+            waveform,
+            duration_ms,
+        })
+    }
+
+    fn run_vad(&self, waveform: &[f32]) -> Result<Vec<Segment>> {
+        let mut vad = self.create_vad()?;
+
+        let mut padded = waveform.to_vec();
+        padded.extend(
+            std::iter::repeat(0.0)
+                .take((TARGET_SAMPLE_RATE as usize) * (VAD_PADDING_SECONDS as usize)),
+        );
+
+        let mut segments = Vec::new();
+        let mut index = 0;
+        while index + VAD_WINDOW_SIZE <= padded.len() {
+            vad.accept_waveform(padded[index..index + VAD_WINDOW_SIZE].to_vec());
+            if vad.is_speech() {
+                while !vad.is_empty() {
+                    let speech = vad.front();
+                    segments.push(Segment {
+                        start_sample: speech.start.max(0) as usize,
+                        samples: speech.samples,
+                    });
+                    vad.pop();
+                }
+            }
+            index += VAD_WINDOW_SIZE;
+        }
+
+        vad.flush();
+        while !vad.is_empty() {
+            let speech = vad.front();
+            segments.push(Segment {
+                start_sample: speech.start.max(0) as usize,
+                samples: speech.samples,
+            });
+            vad.pop();
+        }
+
+        if segments.is_empty() && !waveform.is_empty() {
+            warn!(
+                target = "miaoyu_audio",
+                "VAD 未检测到语音，回退到整段音频识别"
+            );
+            segments.push(Segment {
+                start_sample: 0,
+                samples: waveform.to_vec(),
+            });
+        }
+
+        Ok(segments)
+    }
+
+    fn create_vad(&self) -> Result<SileroVad> {
+        let mut config = SileroVadConfig {
+            model: self.vad_model_path.clone(),
+            sample_rate: TARGET_SAMPLE_RATE,
+            window_size: VAD_WINDOW_SIZE as i32,
+            ..Default::default()
+        };
+        config.min_silence_duration = 0.3;
+        config.min_speech_duration = 0.2;
+        config.max_speech_duration = 120.0;
+        config.threshold = 0.5;
+        config.provider = Some(sherpa_rs::get_default_provider());
+
+        SileroVad::new(config, VAD_BUFFER_DURATION)
+            .map_err(|err| anyhow!("初始化语音活动检测器失败: {err}"))
+    }
+
+    async fn recognize_segments(
+        &self,
+        segments: Vec<Segment>,
+        fallback_waveform: &[f32],
+    ) -> Result<Vec<RecognizedSegment>> {
+        let mut recognizer = self.recognizer.lock().await;
+        let mut punctuator = self.punctuator.lock().await;
+
+        let mut recognized = Vec::new();
+        for segment in &segments {
+            if segment.samples.is_empty() {
+                continue;
+            }
+
+            let samples = segment.samples.clone();
+            let recognition =
+                tokio::task::block_in_place(|| recognizer.transcribe(TARGET_SAMPLE_RATE, &samples));
+            let raw_text = recognition.text.trim().to_string();
+            if raw_text.is_empty() {
+                continue;
+            }
+
+            let punctuated = tokio::task::block_in_place(|| punctuator.add_punctuation(&raw_text));
+            let text = punctuated.trim().to_string();
+            if text.is_empty() {
+                continue;
+            }
+
+            recognized.push(RecognizedSegment {
+                text,
+                start_ms: samples_to_ms(segment.start_sample),
+                end_ms: samples_to_ms(segment.start_sample + segment.samples.len()),
+            });
+        }
+
+        if recognized.is_empty() && !fallback_waveform.is_empty() {
+            let all_samples = fallback_waveform.to_vec();
+            let recognition = tokio::task::block_in_place(|| {
+                recognizer.transcribe(TARGET_SAMPLE_RATE, &all_samples)
+            });
+            let raw_text = recognition.text.trim().to_string();
+            if !raw_text.is_empty() {
+                let punctuated =
+                    tokio::task::block_in_place(|| punctuator.add_punctuation(&raw_text));
+                let text = punctuated.trim().to_string();
+                if !text.is_empty() {
+                    recognized.push(RecognizedSegment {
+                        text,
+                        start_ms: 0,
+                        end_ms: samples_to_ms(all_samples.len()),
+                    });
+                }
+            }
+        }
+
+        if recognized.is_empty() {
+            warn!(
+                target = "miaoyu_audio",
+                "ASR 未能识别到有效文本，可能的原因是麦克风输入过低或环境噪声过大"
+            );
+        }
+
+        Ok(recognized)
+    }
+}
+
+fn resample_linear(samples: &[f32], src_rate: u32, dst_rate: u32) -> Vec<f32> {
+    if samples.is_empty() || src_rate == dst_rate {
+        return samples.to_vec();
+    }
+
+    let ratio = dst_rate as f64 / src_rate as f64;
+    let output_len = ((samples.len() as f64) * ratio).ceil() as usize;
+    if output_len == 0 {
+        return Vec::new();
+    }
+
+    if samples.len() == 1 {
+        return vec![samples[0]; output_len];
+    }
+
+    let mut output = Vec::with_capacity(output_len);
+    for index in 0..output_len {
+        let src_pos = index as f64 / ratio;
+        let base_index = src_pos.floor() as usize;
+        let frac = (src_pos - base_index as f64) as f32;
+
+        let current = samples
+            .get(base_index)
+            .copied()
+            .unwrap_or_else(|| *samples.last().unwrap());
+        let next = samples.get(base_index + 1).copied().unwrap_or(current);
+
+        output.push(current + (next - current) * frac);
+    }
+
+    output
+}
+
+fn samples_to_ms(samples: usize) -> u32 {
+    ((samples as f64) / (TARGET_SAMPLE_RATE as f64) * 1000.0)
+        .round()
+        .clamp(0.0, u32::MAX as f64) as u32
+}
+
+fn resolve_model_path(app: &AppHandle<Wry>, relative: &str) -> Result<PathBuf> {
+    let path = Path::new(relative);
+
+    if let Ok(resolved) = app.path().resolve(path, BaseDirectory::Resource) {
+        if resolved.exists() {
+            return Ok(resolved);
+        }
+    }
+
+    let current_dir = std::env::current_dir().context("无法获取当前工作目录")?;
+    let fallback = current_dir.join("src-tauri").join(path);
+    if fallback.exists() {
+        return Ok(fallback);
+    }
+
+    let direct = current_dir.join(path);
+    if direct.exists() {
+        return Ok(direct);
+    }
+
+    bail!("模型文件不存在: {}", relative);
 }
