@@ -99,6 +99,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.rust == 'true'
+    env:
+      TAURI_CONFIG: src-tauri/tauri.ci.conf.json
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -116,17 +118,11 @@ jobs:
     runs-on: macos-latest
     needs: changes
     if: needs.changes.outputs.rust == 'true'
+    env:
+      TAURI_CONFIG: src-tauri/tauri.ci.conf.json
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
-      - name: Download ASR/VAD models
-        run: bun run download-models
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
