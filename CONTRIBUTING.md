@@ -50,7 +50,7 @@ bun run tauri dev
 若需要构建安装包：
 
 ```bash
-bun run tauri build
+bun run tauri:prod build
 ```
 
 ---

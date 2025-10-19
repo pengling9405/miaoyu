@@ -10,7 +10,7 @@
 - `bun install`：安装前端依赖。
 - `bun run download-models` → `bun run check-models`：一键下载并校验 ASR/VAD/标点模型。
 - `bun run tauri dev`：启动 Vite + Tauri 联调环境。
-- `bun run tauri build`：生成跨平台桌面安装包（模型随包分发）。
+- `bun run tauri:prod build`：生成跨平台桌面安装包（模型随包分发）。
 - `cargo fmt`、`cargo check`（在 `src-tauri/` 目录执行）：格式化并静态检查 Rust 代码。
 - `bun run lint`、`bun run format`：Biome Lint/格式化前端代码。
 
@@ -27,7 +27,7 @@
 ## Commit 与 Pull Request 规范
 - 推荐使用语义化前缀：`feat:...`、`fix:...`、`chore:...` 等，例如 `feat(audio): 支持本地标点模型`。
 - PR 描述需包含变更摘要、测试结果（列出执行过的命令），UI 改动附截图/录屏，并在必要时关联 Issue。
-- 若涉及模型或配置调整，请同步更新脚本、文档与 `tauri.conf.json` 的资源列表。
+- 若涉及模型或配置调整，请同步更新脚本、文档与 `tauri.prod.conf.json` 的资源列表。
 
 ## 安全与配置提示
 - 不要提交 `.env` 或 API Key；LLM 密钥通过设置界面输入。
