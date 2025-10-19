@@ -95,6 +95,15 @@ pub struct OnEscapePress;
 
 pub type HotkeysState = Mutex<HotkeysStore>;
 
+#[derive(Default)]
+pub struct EscapeShortcutState {
+    enabled: Mutex<bool>,
+}
+
+fn escape_shortcut() -> Shortcut {
+    Shortcut::new(None, Code::Escape)
+}
+
 pub fn init(app: &AppHandle) {
     app.plugin(
         tauri_plugin_global_shortcut::Builder::new()
@@ -145,11 +154,8 @@ pub fn init(app: &AppHandle) {
         global_shortcut.register(Shortcut::from(*hotkey)).ok();
     }
 
-    global_shortcut
-        .register(Shortcut::new(None, Code::Escape))
-        .ok();
-
     app.manage(Mutex::new(store));
+    app.manage(EscapeShortcutState::default());
 }
 
 async fn handle_hotkey(app: AppHandle, action: HotkeyAction) -> Result<(), String> {
@@ -218,4 +224,40 @@ pub fn set_hotkey(app: AppHandle, action: HotkeyAction, hotkey: Option<Hotkey>) 
     }
 
     Ok(())
+}
+
+pub fn set_escape_shortcut_enabled(app: &AppHandle, enabled: bool) {
+    let state = app.state::<EscapeShortcutState>();
+    let mut guard = state.enabled.lock().unwrap();
+    let global_shortcut = app.global_shortcut();
+
+    if enabled {
+        if *guard {
+            return;
+        }
+        match global_shortcut.register(escape_shortcut()) {
+            Ok(_) => {
+                *guard = true;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    target = "miaoyu_hotkeys",
+                    error = %error,
+                    "注册 ESC 全局快捷键失败"
+                );
+            }
+        }
+    } else {
+        if !*guard {
+            return;
+        }
+        if let Err(error) = global_shortcut.unregister(escape_shortcut()) {
+            tracing::warn!(
+                target = "miaoyu_hotkeys",
+                error = %error,
+                "注销 ESC 全局快捷键失败"
+            );
+        }
+        *guard = false;
+    }
 }

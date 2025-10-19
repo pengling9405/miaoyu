@@ -6,6 +6,7 @@ pub use transcribing::TranscriptionResult;
 use crate::{
     clipboard,
     feedback::{show_feedback, FeedbackType},
+    hotkeys,
     llm::LLMService,
     permissions::check_os_permissions,
     windows::{resize_main_window, AppWindowId, ShowAppWindow},
@@ -177,6 +178,8 @@ pub async fn start_dictating(app: AppHandle, mode: DictatingMode) -> Result<(), 
         return Err(err.to_string());
     }
 
+    hotkeys::set_escape_shortcut_enabled(&app, true);
+
     Ok(())
 }
 
@@ -203,6 +206,8 @@ pub async fn cancel_dictating(app: AppHandle) -> Result<(), String> {
         emit_state_and_resize(&app, AudioState::Idle, 40.0, 8.0)
             .await
             .map_err(|err| err.to_string())?;
+
+        hotkeys::set_escape_shortcut_enabled(&app, false);
 
         // 播放通知声音
         dictating::AudioDictating::play_notification_sound();
@@ -416,6 +421,8 @@ pub async fn stop_dictating(
 }
 
 async fn reset_to_idle(app: &AppHandle<Wry>) {
+    hotkeys::set_escape_shortcut_enabled(app, false);
+
     let mut state = APP_STATE.lock().await;
     state.audio_state = AudioState::Idle;
     state.dictating_stream = None;
