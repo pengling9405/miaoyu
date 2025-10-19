@@ -28,13 +28,6 @@ use tauri::{Manager, WindowEvent};
 fn check_api_config(app: &tauri::AppHandle) -> bool {
     let settings = SettingsStore::get(app).ok().flatten();
 
-    // 检查 ASR 配置（用户设置或环境变量）
-    let has_asr = settings
-        .as_ref()
-        .and_then(|s| s.asr_app_id.as_ref())
-        .is_some()
-        || std::env::var("VOLCENGINE_APP_ID").is_ok();
-
     // 检查 LLM 配置（用户设置或环境变量）
     let has_llm = settings
         .as_ref()
@@ -43,7 +36,7 @@ fn check_api_config(app: &tauri::AppHandle) -> bool {
         || std::env::var("DEEPSEEK_API_KEY").is_ok();
 
     // 如果两者都没配置，返回 true（需要配置）
-    !has_asr || !has_llm
+    !has_llm
 }
 
 pub type EnvFilteredRegistry =

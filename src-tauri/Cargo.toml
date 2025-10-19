@@ -49,8 +49,7 @@ anyhow = "1.0"
 cpal = "0.16.0"
 tauri-plugin-http = "2.5.2"
 reqwest = { version = "0.12.23", features = ["json"] }
-base64 = "0.22.1"
-uuid = { version = "1.11.0", features = ["v4"] }
+sherpa-rs = { version = "0.6.8", default-features = false }
 tauri-plugin-global-shortcut = "2.3.0"
 tauri-plugin-clipboard-manager = "2.3.0"
 global-hotkey = "0.7.0"

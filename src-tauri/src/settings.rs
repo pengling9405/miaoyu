@@ -17,10 +17,6 @@ pub struct SettingsStore {
     #[serde(default)]
     pub audio_flow_panel_position: AudioFlowPanelPosition,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub asr_app_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub asr_access_token: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub llm_api_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub llm_system_prompt: Option<String>,
@@ -41,8 +37,6 @@ impl Default for SettingsStore {
         Self {
             theme: AppTheme::System,
             audio_flow_panel_position: AudioFlowPanelPosition::BottomCenter,
-            asr_app_id: None,
-            asr_access_token: None,
             llm_api_key: None,
             llm_system_prompt: Some(DEFAULT_SYSTEM_PROMPT.to_string()),
             autostart_enabled: false,

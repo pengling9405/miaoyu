@@ -38,6 +38,11 @@ fn get_user_friendly_error_message(error: &anyhow::Error) -> String {
         return format!("服务调用失败: {}", error_str);
     }
 
+    // VAD 或录音相关提示
+    if error_str.contains("未检测到语音") {
+        return "未检测到语音，请检查麦克风并在录音时保持发声".to_string();
+    }
+
     // 默认返回原始错误信息
     format!("操作失败: {}", error_str)
 }
