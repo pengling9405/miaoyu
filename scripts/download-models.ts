@@ -8,6 +8,14 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
+const BUNDLE_VERSION = "2024-03-09";
+const BUNDLE_FILENAME = `miaoyu-models-${BUNDLE_VERSION}.tar.bz2`;
+const DEFAULT_BUNDLE_URL = `https://github.com/zhanyuilong/miaoyu/releases/download/models-${BUNDLE_VERSION}/${BUNDLE_FILENAME}`;
+const BUNDLE_URL =
+  process.env.MIAOYU_MODELS_BUNDLE_URL ?? DEFAULT_BUNDLE_URL;
+
+const MODEL_DIRS = ["asr", "punc", "vad"] as const;
+
 type DownloadTask =
   | {
       key: "asr" | "punc";
@@ -87,6 +95,39 @@ async function cleanupModelDir(directory: string) {
   await rm(path.join(directory, ".gitignore"), { force: true });
 }
 
+async function extractBundle(archivePath: string) {
+  await rm(MODELS_ROOT, { recursive: true, force: true });
+  await ensureDir(MODELS_ROOT);
+  await execFileAsync("tar", ["-xjf", archivePath, "-C", MODELS_ROOT]);
+  for (const dir of MODEL_DIRS) {
+    await cleanupModelDir(path.join(MODELS_ROOT, dir));
+  }
+}
+
+async function tryDownloadBundle(): Promise<boolean> {
+  const tempArchive = path.join(
+    tmpdir(),
+    `miaoyu-bundle-${randomUUID()}.tar.bz2`,
+  );
+
+  console.log("🎯 尝试从模型发布包下载…");
+  try {
+    await downloadFile(BUNDLE_URL, tempArchive);
+    console.log("📦 解压模型包…");
+    await extractBundle(tempArchive);
+    console.log("✅ 模型包准备完成。");
+    return true;
+  } catch (error) {
+    console.warn(
+      "⚠️ 模型包下载失败，将回退到逐个模型下载。",
+      error instanceof Error ? `(${error.message})` : error,
+    );
+    return false;
+  } finally {
+    await rm(tempArchive, { force: true });
+  }
+}
+
 async function processDownload(task: DownloadTask) {
   const destDir = path.join(MODELS_ROOT, task.key);
   const requiredFiles = task.files.map((file) => path.join(destDir, file));
@@ -124,6 +165,10 @@ async function processDownload(task: DownloadTask) {
 
 async function main() {
   console.log("🧰 准备下载妙语离线语音模型…");
+  if (await tryDownloadBundle()) {
+    return;
+  }
+
   await ensureDir(MODELS_ROOT);
 
   for (const task of DOWNLOADS) {

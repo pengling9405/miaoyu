@@ -123,6 +123,8 @@ DEEPSEEK_API_KEY=your_api_key_here
 bun run download-models
 ```
 
+脚本会优先尝试从本仓库 Release 中的模型整包（默认 `models-2024-03-09/miaoyu-models-2024-03-09.tar.bz2`）下载，若需要自建镜像可设置环境变量 `MIAOYU_MODELS_BUNDLE_URL` 指向新的压缩包；下载失败时会自动回退到原始开源仓库的模型地址。
+
 下载完成后可执行一次检查：
 
 ```bash
