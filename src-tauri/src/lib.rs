@@ -22,6 +22,7 @@ use crate::settings::SettingsStore;
 use crate::windows::{AppWindowId, ShowAppWindow};
 use std::str::FromStr;
 use tauri::{Manager, WindowEvent};
+use tauri_plugin_updater::UpdaterExt;
 
 /// 检查是否已配置 API 密钥
 /// 返回 true 表示需要配置
@@ -137,6 +138,26 @@ pub async fn run(_logging_handle: LoggingHandle) {
 
                     // Start observing screen changes (Dock show/hide) to reposition windows
                     windows::start_screen_observer(app.clone());
+
+                    // 自动检查更新
+                    match app.updater() {
+                        Ok(updater) => {
+                            if let Err(error) = updater.check().await {
+                                tracing::debug!(
+                                    target = "miaoyu_updater",
+                                    error = %error,
+                                    "自动检查更新失败"
+                                );
+                            }
+                        }
+                        Err(error) => {
+                            tracing::debug!(
+                                target = "miaoyu_updater",
+                                error = %error,
+                                "获取更新器实例失败"
+                            );
+                        }
+                    }
                 }
             });
 

@@ -16,8 +16,11 @@
   },
   "plugins": {
     "updater": {
-      "active": false,
-      "dialog": false,
+      "active": true,
+      "dialog": true,
+      "endpoints": [
+        "https://updates.miaoyu.app/latest.json"
+      ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDEwMjRGMzA0NEYwMjA0NDAKUldSQUJBSlBCUE1rRUJWSm56TnVSbTZNT1ZnWVN3TE8yMzk1SGhGQVprQlkzU3ZjUGxaallET1UK"
     }
   },
