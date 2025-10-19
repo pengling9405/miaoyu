@@ -1,5 +1,6 @@
 use std::{
     io::Cursor,
+    iter::repeat_n,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -227,10 +228,10 @@ impl LocalSherpa {
         let mut vad = self.create_vad()?;
 
         let mut padded = waveform.to_vec();
-        padded.extend(
-            std::iter::repeat(0.0)
-                .take((TARGET_SAMPLE_RATE as usize) * (VAD_PADDING_SECONDS as usize)),
-        );
+        padded.extend(repeat_n(
+            0.0,
+            (TARGET_SAMPLE_RATE as usize) * (VAD_PADDING_SECONDS as usize),
+        ));
 
         let mut segments = Vec::new();
         let mut index = 0;
