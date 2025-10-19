@@ -1,110 +1,205 @@
-# 妙语 - 智能语音输入桌面应用
+<p align="center">
+  <p align="center">
+    <img width="150" height="150" src="assets/icon.png" alt="妙语 Logo">
+  </p>
+  <h1 align="center"><b>妙语</b></h1>
+  <p align="center">
+    面向中文用户的离线智能语音工作流
+    <br />
+    <a href="#"><strong>了解更多 »</strong></a>
+    <br />
+    <br />
+    <b>下载适用于 </b>
+    <a href="#">macOS & Windows</a>
+    <br />
+  </p>
+</p>
 
-基于 Tauri + React + TypeScript 的智能语音输入工具，支持语音识别和 AI 文本润色。
+<br/>
 
-## 功能特性
+[![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-macOS%20|%20Windows%20|%20Linux-lightgrey)
+![Release](https://img.shields.io/badge/release-v0.1.0-orange)
+![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
 
-- 🎤 **语音识别**: 基于火山引擎 ASR
-- ✨ **智能润色**: 使用 DeepSeek AI 优化文本
-- ⌨️ **Hands-Free 模式**: 快捷键 `Option + Space` 启动/停止
-- 🎯 **自动粘贴**: 识别完成后自动输入到活跃应用
+---
 
-## 环境配置
+## 🪶 简介
 
-### 开发环境配置
+**妙语** 是一款专注中文语境的桌面语音输入工具。
+它将语音录制、离线识别、智能标点和自动粘贴串成一条工作流，让你开口即可成文，并支持可选的 LLM 润色。
 
-#### 1. 复制环境变量模板
+与传统云端语音服务不同，妙语默认在本地推理完成整个 ASR 流程，确保隐私、安全和低延迟。
+
+---
+
+## ✨ 核心能力
+
+| 能力 | 说明 |
+|------|------|
+| 📴 **全离线语音识别** | 基于 `sherpa-rs` + `Paraformer` 的 ASR 引擎，使用 ONNX Runtime 直接在本地运行，无需网络。 |
+| 🎯 **Silero VAD 精准检测** | 内置 Silero VAD 模型，自动裁剪静音段，按语句识别并生成时间戳。 |
+| 📝 **智能标点补全** | 使用 ct-transformer 标点模型对识别结果补全标点和断句，输出更自然。 |
+| 🪄 **可选 LLM 润色** | 可接入任何兼容 OpenAI API 的模型（如 DeepSeek、qwen、Kimi 等），用于对识别文本做风格化润色。 |
+| ⌨️ **跨应用输入** | 通过全局快捷键触发录音，识别结果自动写入剪贴板并粘贴到光标所在位置。 |
+
+---
+
+## 📦 模型与目录结构
+
+所有模型按照功能分类存放在 `src-tauri/models` 下：
+
+```
+src-tauri/models/
+├── asr/
+│   ├── model.int8.onnx      # Paraformer ASR 模型
+│   ├── tokens.txt           # ASR 词表
+│   └── config.yaml          # 原始模型配置（可选）
+├── vad/
+│   └── silero_vad.onnx      # Silero VAD 模型
+└── punc/
+    ├── model.onnx           # ct-transformer 标点模型
+    ├── tokens.json          # 标点词表
+    └── config.yaml          # 原始模型配置（可选）
+```
+
+> 推荐执行 `bun run download-models` 一键下载并更新模型。脚本会跳过已存在的文件。
+>
+> 如果目录中缺失模型文件，应用会在启动录音时提示错误。确保已按上表放置模型。
+
+### 快速下载脚本
+
+```bash
+cd src-tauri/models
+
+# 语音活动检测
+mkdir -p vad
+curl -L -o vad/silero_vad.onnx \
+  https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
+
+# Paraformer 中文 ASR（示例：小尺寸 int8 版本）
+mkdir -p asr
+curl -L -o /tmp/paraformer.tar.bz2 \
+  https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-zh-2024-03-09.tar.bz2
+tar -xjf /tmp/paraformer.tar.bz2 -C asr --strip-components=1
+
+# 标点模型
+mkdir -p punc
+curl -L -o /tmp/punc.tar.bz2 \
+  https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2
+tar -xjf /tmp/punc.tar.bz2 -C punc --strip-components=1
+```
+
+根据需要也可以换成你自己的 sherpa-onnx 模型，只要保证采样率为 16 kHz 并且文件名与代码匹配。
+
+---
+
+## 🚀 快速开始
+
+### 环境要求
+
+- [Bun](https://bun.sh) 1.1+
+- Node.js 18+（用于类型检查）
+- Rust 工具链（`rustup` 安装 stable 即可）
+- macOS 10.15+ / Windows 10+ / 大多数主流 Linux 发行版
+
+### 安装依赖
+
+```bash
+git clone https://github.com/your-org/miaoyu.git
+cd miaoyu
+
+bun install
+```
+
+### 配置可选的 LLM API（可跳过）
 
 ```bash
 cd src-tauri
 cp .env.example .env
-```
 
-#### 2. 配置 API 密钥
-
-编辑 `src-tauri/.env` 文件：
-
-```env
-# 火山引擎语音识别配置
-# 获取地址: https://console.volcengine.com/speech/service/8
-VOLCENGINE_APP_ID=your_app_id_here
-VOLCENGINE_ACCESS_TOKEN=your_access_token_here
-
-# DeepSeek AI 配置
-# 获取地址: https://platform.deepseek.com/api_keys
+# 编辑 .env，添加：
 DEEPSEEK_API_KEY=your_api_key_here
 ```
 
-### 生产环境配置
+### 准备模型
 
-✅ **重要**：`.env` 文件中的值会在**构建时编译进二进制文件**作为默认值！
+运行一键脚本或按需手动下载模型：
 
-#### 构建时行为
-
-当运行 `bun tauri build` 时：
-- ✅ `.env` 文件在**构建阶段**被读取
-- ✅ 环境变量值被**编译进二进制文件**作为默认值
-- 📦 用户安装后可以**直接使用**，无需配置
-- 🔧 用户可以在设置界面**覆盖默认值**
-
-**验证构建时是否包含环境变量**：
 ```bash
-# 构建时会显示警告信息
-bun tauri build
-# 输出应该包含：
-# warning: 已设置 VOLCENGINE_APP_ID
-# warning: 已设置 VOLCENGINE_ACCESS_TOKEN
-# warning: 已设置 DEEPSEEK_API_KEY
+bun run download-models
 ```
 
-#### 用户体验
+下载完成后可执行一次检查：
 
-**默认情况（开箱即用）**：
-- 用户安装 DMG → 直接使用 → 使用编译时的默认 API 密钥
-
-**自定义配置（可选）**：
-- 打开设置界面（`Cmd + ,`）
-- 填入自己的 API 密钥
-- 覆盖默认配置
-
-#### GitHub Actions 自动发布
-
-在 GitHub Secrets 中配置环境变量：
-
-```yaml
-# .github/workflows/release.yml
-- name: Create .env file
-  run: |
-    cd src-tauri
-    cat > .env << EOF
-    VOLCENGINE_APP_ID=${{ secrets.VOLCENGINE_APP_ID }}
-    VOLCENGINE_ACCESS_TOKEN=${{ secrets.VOLCENGINE_ACCESS_TOKEN }}
-    DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
-    EOF
-
-- name: Build
-  run: bun tauri build
+```bash
+bun run check-models
 ```
 
-在 GitHub 仓库设置中添加 Secrets：
-- `VOLCENGINE_APP_ID`
-- `VOLCENGINE_ACCESS_TOKEN`
-- `DEEPSEEK_API_KEY`
+### 启动开发模式
 
-### 配置优先级
-
-```
-用户设置 (UI) > 运行时环境变量 > 编译时默认值
+```bash
+bun run tauri dev
 ```
 
-1. **用户设置** - 应用内设置界面（用户自定义）
-2. **运行时环境变量** - 系统环境变量（高级用户）
-3. **编译时默认值** - `.env` 文件编译进二进制（开箱即用）
+### 构建生产安装包
 
-> 💡 **开发提示**：`.env` 文件的值会被编译进二进制文件。
-> 🔒 **安全提示**：`.env` 已在 `.gitignore` 中，不会被提交到版本控制。
-> ⚠️ **发布注意**：GitHub Actions 需要配置 Secrets 来提供默认 API 密钥。
+```bash
+bun run tauri build
+```
 
-## Recommended IDE Setup
+---
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+## 🧠 运行时流程
+
+```plaintext
+麦克风 → CPAL 录音线程
+       → Silero VAD 分段检测
+       → Paraformer ASR 离线识别
+       → ct-transformer 标点补全
+       → （可选）LLM 润色
+       → 剪贴板/自动粘贴 → 目标应用
+```
+
+- 录音采样率自动降采样到 16 kHz，以兼容 ONNX 模型。
+- VAD 采用 512 帧滑窗，尾部补 3 秒静音，确保检测到语音结束。
+- 若 VAD 或 ASR 未识别到语音，会提示“未检测到语音，请检查麦克风并在录音时保持发声”。
+- 全流程在本地运行，不上传任何语音或文本。
+
+---
+
+## 🧩 常见问题
+
+| 问题 | 排查建议 |
+|------|----------|
+| 提示 “未找到 VAD 模型” | 确认 `src-tauri/models/vad/silero_vad.onnx` 是否存在且未被重命名。 |
+| 识别为空或全是静音 | 检查外接麦克风音量，或在设置中关闭降噪软件。必要时可调低 `threshold`。 |
+| 构建缓慢 | `sherpa-rs` 首次编译会下载并编译原生依赖，耐心等待即可。 |
+
+更多调试日志可在 `src-tauri/tauri.conf.json` 中开启。
+
+---
+
+## 🛠️ 技术栈
+
+- **前端**：React 19、Vite 7、Tailwind CSS 4
+- **桌面容器**：Tauri 2、Rust 2021
+- **音频录制**：cpal、rodio
+- **本地语音识别**：sherpa-rs（Paraformer、Silero VAD、ct-transformer）
+- **日志**：tracing、tracing-subscriber
+- **打包**：Tauri Bundler（macOS / Windows / Linux）
+
+---
+
+## 🤝 贡献
+
+欢迎提交 Issue 或 PR。
+在提交之前请执行：
+
+```bash
+bun run lint
+cargo fmt
+cargo check
+```
+
+期待与你一起把妙语打造成更好用的中文语音工作流工具。

@@ -5,84 +5,62 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-
-env:
-  APP_CARGO_TOML: src-tauri/Cargo.toml
-  APP_NAME: miaoyu
+    inputs:
+      version:
+        description: 'Release version (例如 0.1.1)'
+        required: false
 
 jobs:
-  draft:
-    name: Create Draft Release
+  prepare:
+    name: Prepare Release
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.read_version.outputs.value }}
-      release_id: ${{ steps.create_release.outputs.id }}
-      release_url: ${{ steps.create_release.outputs.html_url }}
-    permissions:
-      contents: write
+      version: ${{ steps.version.outputs.value }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
-      - name: Read version from Cargo.toml
-        uses: SebRollen/toml-action@v1.2.0
-        id: read_version
-        with:
-          file: ${{ env.APP_CARGO_TOML }}
-          field: package.version
-
-      - name: Generate Changelog
-        id: changelog
-        env:
-          OUTPUT: CHANGELOG-${{ steps.read_version.outputs.value }}.md
+      - name: Resolve version
+        id: version
+        shell: bash
         run: |
-          bunx --bun git-cliff --config cliff.toml --verbose --latest --strip header --output "$OUTPUT"
-          {
-            echo 'content<<EOF'
-            cat "$OUTPUT"
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-          rm "$OUTPUT"
-
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          prerelease: false
-          tag_name: v${{ steps.read_version.outputs.value }}
-          name: v${{ steps.read_version.outputs.value }}
-          body: ${{ steps.changelog.outputs.content }}
-          generate_release_notes: false
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            raw="${GITHUB_REF##*/}"
+            version="${raw#v}"
+          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+            version="${{ github.event.inputs.version }}"
+          else
+            version=$(node -p "require('./package.json').version")
+          fi
+          if [[ -z "$version" ]]; then
+            echo "failed to determine version" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build ${{ matrix.settings.target }}
-    needs: draft
+    name: Build ${{ matrix.name }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        settings:
-          - target: x86_64-apple-darwin
+        include:
+          - name: macOS
             runner: macos-latest
-            os: macOS
-          - target: aarch64-apple-darwin
-            runner: macos-latest
-            os: macOS
-          - target: x86_64-pc-windows-msvc
+            artifact: macos
+          - name: Windows
             runner: windows-latest
-            os: Windows
-
-    runs-on: ${{ matrix.settings.runner }}
-    permissions:
-      contents: write
-
+            artifact: windows
+          - name: Linux
+            runner: ubuntu-latest
+            artifact: linux
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,273 +72,50 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.settings.target }}
 
-      - name: Rust Cache
+      - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          key: ${{ matrix.settings.target }}
 
-      - name: Create Apple API key file
-        if: matrix.settings.os == 'macOS'
-        run: |
-          printf '%s' "${{ secrets.APPLE_API_KEY_FILE }}" > api.p8
-
-      - name: Import signing certificates
-        if: matrix.settings.os == 'macOS'
-        uses: apple-actions/import-codesign-certs@v2
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-
-      - name: Verify signing identity
-        if: matrix.settings.os == 'macOS'
-        run: security find-identity -v -p codesigning "$RUNNER_TEMP/build.keychain"
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev
 
       - name: Install dependencies
-        if: runner.os != 'Windows'
         run: bun install
 
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: bun install
+      - name: Download models
+        run: bun run download-models
 
-      - name: Create .env file
-        shell: bash
-        run: |
-          cd src-tauri
-          {
-            printf 'VOLCENGINE_APP_ID=%s\n' "${{ secrets.VOLCENGINE_APP_ID }}"
-            printf 'VOLCENGINE_ACCESS_TOKEN=%s\n' "${{ secrets.VOLCENGINE_ACCESS_TOKEN }}"
-            printf 'DEEPSEEK_API_KEY=%s\n' "${{ secrets.DEEPSEEK_API_KEY }}"
-          } > .env
+      - name: Verify models
+        run: bun run check-models
 
-      - name: Build Tauri app
-        if: matrix.settings.os == 'macOS'
-        env:
-          CI: false
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_PATH: ${{ github.workspace }}/api.p8
-          APPLE_KEYCHAIN: ${{ runner.temp }}/build.keychain
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          bun tauri build --target ${{ matrix.settings.target }} --config src-tauri/tauri.prod.conf.json
+      - name: Build Tauri bundle
+        run: bun run tauri build
 
-      - name: Build Tauri app (Windows)
-        if: matrix.settings.os == 'Windows'
-        shell: pwsh
-        env:
-          CI: false
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          bun tauri build --target ${{ matrix.settings.target }} --config src-tauri/tauri.prod.conf.json
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: miaoyu-${{ matrix.artifact }}
+          path: src-tauri/target/release/bundle
 
-      - name: Remove Apple API key file
-        if: matrix.settings.os == 'macOS'
-        run: rm -f api.p8
-
-      - name: Upload release assets
-        if: runner.os != 'Windows'
-        env:
-          TAG_NAME: v${{ needs.draft.outputs.version }}
-          TARGET: ${{ matrix.settings.target }}
-          VERSION: ${{ needs.draft.outputs.version }}
-          RELEASE_ID: ${{ needs.draft.outputs.release_id }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          bundle_dir="src-tauri/target/${TARGET}/release/bundle"
-          if [ ! -d "$bundle_dir" ]; then
-            echo "Bundle directory not found: $bundle_dir" >&2
-            exit 1
-          fi
-          case "$TARGET" in
-            aarch64-apple-darwin)
-              arch_suffix="aarch64"
-              old_asset_name="_${VERSION}_${arch_suffix}.dmg"
-              final_asset_name="${APP_NAME}_${VERSION}_${arch_suffix}.dmg"
-              ;;
-            x86_64-apple-darwin)
-              arch_suffix="x64"
-              old_asset_name="_${VERSION}_${arch_suffix}.dmg"
-              final_asset_name="${APP_NAME}_${VERSION}_${arch_suffix}.dmg"
-              ;;
-            *)
-              arch_suffix="$TARGET"
-              old_asset_name=""
-              final_asset_name=""
-              ;;
-          esac
-          if [ -n "$old_asset_name" ]; then
-            gh release delete-asset "${RELEASE_ID}" "$old_asset_name" --yes >/dev/null 2>&1 || true
-          fi
-          if [ -n "$final_asset_name" ]; then
-            gh release delete-asset "${RELEASE_ID}" "$final_asset_name" --yes >/dev/null 2>&1 || true
-          fi
-          find "$bundle_dir" -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.tar.gz' -o -name '*.pkg' -o -name '*.json' \) -print0 \
-            | while IFS= read -r -d '' file; do
-                filename="$(basename "$file")"
-                dirname="$(dirname "$file")"
-                new_name="$filename"
-                rename_after_upload=false
-                legacy_name=""
-                case "$filename" in
-                  *.dmg)
-                    new_name="${APP_NAME}_${VERSION}_${arch_suffix}.dmg"
-                    rename_after_upload=true
-                    legacy_name="$old_asset_name"
-                    ;;
-                esac
-                if [ "$new_name" != "$filename" ]; then
-                  new_path="${dirname}/${new_name}"
-                  mv -f "$file" "$new_path"
-                  file="$new_path"
-                fi
-                echo "Uploading $file"
-                gh release upload "$TAG_NAME" "$file" --clobber
-                if [ "$rename_after_upload" = true ]; then
-                  repo="${GITHUB_REPOSITORY}"
-                  if [ -z "$repo" ]; then
-                    echo "GITHUB_REPOSITORY is not set" >&2
-                    exit 1
-                  fi
-                  release_payload="$(gh api "repos/${repo}/releases/${RELEASE_ID}")"
-                  asset_id="$(printf '%s\n' "$release_payload" | jq -r --arg legacy "$legacy_name" --arg final "$new_name" '
-                    .assets[]
-                    | select(.name == $legacy or .name == $final)
-                    | .id
-                  ' | head -n1)"
-                  if [ -z "$asset_id" ] || [ "$asset_id" = "null" ]; then
-                    echo "Failed to locate uploaded asset to rename (searched for $legacy_name / $new_name)" >&2
-                    exit 1
-                  fi
-                  echo "Renaming release asset to $new_name"
-                  gh api --silent --method PATCH "repos/${repo}/releases/assets/${asset_id}" -f name="$new_name"
-                fi
-              done
-
-      - name: Upload release assets (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          TAG_NAME: v${{ needs.draft.outputs.version }}
-          TARGET: ${{ matrix.settings.target }}
-          VERSION: ${{ needs.draft.outputs.version }}
-          RELEASE_ID: ${{ needs.draft.outputs.release_id }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $bundle = "src-tauri/target/$env:TARGET/release/bundle"
-          if (!(Test-Path $bundle)) { throw "Bundle directory not found: $bundle" }
-          switch ($env:TARGET) {
-            "x86_64-pc-windows-msvc" {
-              $archSuffix = "x64"
-              $oldAssetNames = @(
-                "_$($env:VERSION)_${archSuffix}-setup.exe",
-                "_$($env:VERSION)_${archSuffix}.exe",
-                "_$($env:VERSION)_${archSuffix}_zh-CN.msi",
-                "_$($env:VERSION)_${archSuffix}.msi"
-              )
-              $finalAssetNames = @(
-                "$($env:APP_NAME)_$($env:VERSION)_${archSuffix}.exe",
-                "$($env:APP_NAME)_$($env:VERSION)_${archSuffix}.msi"
-              )
-            }
-            default {
-              $archSuffix = $env:TARGET
-              $oldAssetNames = @()
-              $finalAssetNames = @()
-            }
-          }
-          foreach ($oldName in $oldAssetNames) {
-            if ($oldName) {
-              Write-Host "Removing legacy asset $oldName (if present)"
-              gh release delete-asset $env:RELEASE_ID $oldName --yes | Out-Null
-              if ($LASTEXITCODE -ne 0) {
-                Write-Host "No existing asset named $oldName to remove"
-                $global:LASTEXITCODE = 0
-              }
-            }
-          }
-          foreach ($finalName in $finalAssetNames) {
-            if ($finalName) {
-              Write-Host "Removing existing asset $finalName (if present)"
-              gh release delete-asset $env:RELEASE_ID $finalName --yes | Out-Null
-              if ($LASTEXITCODE -ne 0) {
-                Write-Host "No existing asset named $finalName to remove"
-                $global:LASTEXITCODE = 0
-              }
-            }
-          }
-          function Rename-ReleaseAsset {
-            param(
-              [string] $LegacyName,
-              [string] $DesiredName
-            )
-            $repo = $env:GITHUB_REPOSITORY
-            if (-not $repo) { throw "GITHUB_REPOSITORY environment variable is missing." }
-            $release = gh api "repos/$repo/releases/$($env:RELEASE_ID)" | ConvertFrom-Json
-            $asset = $release.assets | Where-Object { $_.name -eq $LegacyName -or $_.name -eq $DesiredName } | Select-Object -First 1
-            if (-not $asset) { throw "Failed to find release asset for $LegacyName / $DesiredName" }
-            Write-Host "Renaming release asset to $DesiredName"
-            gh api --method PATCH "repos/$repo/releases/assets/$($asset.id)" -f name=$DesiredName | Out-Null
-          }
-          Get-ChildItem -Path $bundle -Recurse -File | Where-Object {
-            $_.Name -like '*.json' -or $_.Name -like '*.zip' -or $_.Name -like '*.msi' -or $_.Name -like '*.exe'
-          } | ForEach-Object {
-            $assetName = $_.Name
-            switch -Wildcard ($_.Name) {
-              '*.msi' { $assetName = "$($env:APP_NAME)_$($env:VERSION)_${archSuffix}.msi" }
-              '*.exe' { $assetName = "$($env:APP_NAME)_$($env:VERSION)_${archSuffix}.exe" }
-            }
-            if ($assetName -ne $_.Name) {
-              $newPath = Join-Path $_.DirectoryName $assetName
-              Move-Item -LiteralPath $_.FullName -Destination $newPath -Force
-              $fileToUpload = $newPath
-            } else {
-              $fileToUpload = $_.FullName
-            }
-            Write-Host "Uploading $fileToUpload"
-            gh release upload $env:TAG_NAME $fileToUpload --clobber
-            switch -Wildcard ($assetName) {
-              '*.msi' { Rename-ReleaseAsset -LegacyName "_$($env:VERSION)_${archSuffix}.msi" -DesiredName $assetName }
-              '*.exe' { Rename-ReleaseAsset -LegacyName "_$($env:VERSION)_${archSuffix}.exe" -DesiredName $assetName }
-            }
-          }
-
-  done:
+  release:
     name: Publish Release
-    needs: [draft, build]
+    needs: [prepare, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Publish Release
-        uses: actions/github-script@v7
+      - name: Download bundles
+        uses: actions/download-artifact@v4
         with:
-          script: |
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: ${{ needs.draft.outputs.release_id }},
-              draft: false
-            });
+          path: dist
 
-      - name: Summary
-        run: |
-          echo "### 🎉 Release Published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Version: **v${{ needs.draft.outputs.version }}**" >> $GITHUB_STEP_SUMMARY
-          echo "Release URL: ${{ needs.draft.outputs.release_url }}" >> $GITHUB_STEP_SUMMARY
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: ${{ needs.prepare.outputs.tag }}
+          generate_release_notes: true
+          files: dist/**/*
