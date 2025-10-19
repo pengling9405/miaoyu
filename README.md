@@ -1,17 +1,10 @@
 <p align="center">
   <p align="center">
-    <img width="150" height="150" src="assets/icon.png" alt="妙语 Logo">
+    <img width="150" height="150" src="https://github.com/zhanyuilong/miaoyu/blob/main/src-tauri/icons/Square310x310Logo.png" alt="妙语 Logo">
   </p>
   <h1 align="center"><b>妙语</b></h1>
   <p align="center">
     面向中文用户的离线智能语音工作流
-    <br />
-    <a href="#"><strong>了解更多 »</strong></a>
-    <br />
-    <br />
-    <b>下载适用于 </b>
-    <a href="#">macOS & Windows</a>
-    <br />
   </p>
 </p>
 
