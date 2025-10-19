@@ -17,7 +17,7 @@
 ## 代码风格与命名约定
 - TypeScript/TSX：使用 Biome 默认（2 空格缩进、单引号），组件 PascalCase，工具函数 camelCase。
 - Rust：遵循 `rustfmt` 输出，模块文件 snake_case，类型名 CamelCase。
-- 模型与资源按功能划分目录：`models/asr`、`models/punc`、`models/vad`。
+- 模型与资源按功能划分目录：`models/asr`、`models/punc`、`models/vad`；发布新模型时同步更新 `scripts/download-models.ts` 中的整包版本信息与仓库 Release 资产。
 
 ## 测试指引
 - Rust：新增逻辑时运行 `cargo check`，需要时补充模块单测并执行 `cargo test`。
