@@ -10,7 +10,7 @@
 - `bun install`：安装前端依赖。
 - `bun run download-models` → `bun run check-models`：一键下载并校验 ASR/VAD/标点模型。
 - `bun run tauri dev`：启动 Vite + Tauri 联调环境。
-- `bun run tauri:prod build`：生成跨平台桌面安装包（模型随包分发）。
+- `bun tauri build --config src-tauri/tauri.prod.conf.json`：生成跨平台桌面安装包（模型随包分发）。
 - `cargo fmt`、`cargo check`（在 `src-tauri/` 目录执行）：格式化并静态检查 Rust 代码。
 - `bun run lint`、`bun run format`：Biome Lint/格式化前端代码。
 

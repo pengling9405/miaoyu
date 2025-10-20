@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "妙语",
+  "identifier": "so.miaoyu.desktop",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:2025",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist/client"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "createUpdaterArtifacts": true,
+    "externalBin": [],
+    "resources": ["models/**/*"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns"
+    ],
+    "macOS": {
+      "entitlements": "Entitlements.plist",
+      "bundleName": "妙语",
+      "signingIdentity": "Developer ID Application: Ling Peng (NT97W6J38J)"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/zhanyuilong/miaoyu/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlCNTQ0QzMyQjMzQzY0NDIKUldSQ1pEeXpNa3hVbStRdmswUjR2Q05PNys0OFhyZ1FTSUtnRVZuM2ROTHhMeWh3NlRzRDJ3NW8K"
+    }
+  }
+}

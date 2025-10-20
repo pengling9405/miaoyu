@@ -12,7 +12,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-macOS%20|%20Windows%20|%20Linux-lightgrey)
-![Release](https://img.shields.io/badge/release-v0.1.0-orange)
+![Release](https://img.shields.io/badge/release-v0.2.0-orange)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
 
 ---
@@ -140,7 +140,7 @@ bun run tauri dev
 ### 构建生产安装包
 
 ```bash
-bun run tauri:prod build
+bun tauri build --config src-tauri/tauri.prod.conf.json
 ```
 
 ---

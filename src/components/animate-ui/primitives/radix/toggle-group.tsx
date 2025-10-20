@@ -1,7 +1,7 @@
 "use client";
 
+import * as ToggleGroupPrimitive from "@radix-ui/react-toggle-group";
 import { AnimatePresence, type HTMLMotionProps, motion } from "motion/react";
-import { ToggleGroup as ToggleGroupPrimitive } from "radix-ui";
 import * as React from "react";
 
 import {

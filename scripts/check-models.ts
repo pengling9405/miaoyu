@@ -8,6 +8,10 @@ const REQUIRED_MODELS = [
     description: "Paraformer ASR 模型",
   },
   {
+    path: "asr/am.mvn",
+    description: "ASR 均值方差参数",
+  },
+  {
     path: "asr/tokens.txt",
     description: "ASR 词表",
   },
@@ -18,6 +22,10 @@ const REQUIRED_MODELS = [
   {
     path: "punc/tokens.json",
     description: "标点模型词表",
+  },
+  {
+    path: "punc/config.yaml",
+    description: "标点模型配置",
   },
   {
     path: "vad/silero_vad.onnx",

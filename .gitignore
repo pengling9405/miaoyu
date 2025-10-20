@@ -26,3 +26,4 @@ dist-ssr
 .env
 *.p8
 src-tauri/models/
+src-tauri/bin/
