@@ -1,10 +1,11 @@
-fn main() {
-    // 在构建时加载 .env 文件
-    dotenvy::dotenv().ok();
+use std::env;
 
-    if let Ok(key) = std::env::var("DEEPSEEK_API_KEY") {
+fn main() {
+    // 常规：把环境变量注入
+    dotenvy::dotenv().ok();
+    if let Ok(key) = env::var("DEEPSEEK_API_KEY") {
         println!("cargo:rustc-env=DEEPSEEK_API_KEY={}", key);
     }
-
-    tauri_build::build()
+    println!("cargo:rerun-if-changed=build.rs");
+    tauri_build::build();
 }

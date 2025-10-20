@@ -1,7 +1,7 @@
 "use client";
 
+import * as TogglePrimitive from "@radix-ui/react-toggle";
 import { AnimatePresence, type HTMLMotionProps, motion } from "motion/react";
-import { Toggle as TogglePrimitive } from "radix-ui";
 import type * as React from "react";
 import { useControlledState } from "~/hooks/use-controlled-state";
 import { getStrictContext } from "~/lib/get-strict-context";

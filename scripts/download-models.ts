@@ -1,4 +1,4 @@
-import { mkdir, rm, access } from "node:fs/promises";
+import { mkdir, rm, access, readdir } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -35,13 +35,13 @@ const DOWNLOADS: DownloadTask[] = [
     key: "asr",
     url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-zh-2024-03-09.tar.bz2",
     archive: true,
-    files: ["model.int8.onnx", "tokens.txt"],
+    files: ["model.int8.onnx", "tokens.txt", "am.mvn"],
   },
   {
     key: "punc",
     url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12.tar.bz2",
     archive: true,
-    files: ["model.onnx", "tokens.json"],
+    files: ["model.onnx", "tokens.json", "config.yaml"],
   },
   {
     key: "vad",
@@ -53,6 +53,7 @@ const DOWNLOADS: DownloadTask[] = [
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MODELS_ROOT = path.resolve(__dirname, "../src-tauri/models");
+let curlAvailable: boolean | undefined;
 
 async function exists(filePath: string): Promise<boolean> {
   try {
@@ -68,14 +69,38 @@ async function ensureDir(dir: string) {
 }
 
 async function downloadFile(url: string, destination: string) {
-  console.log(`⬇️  下载 ${url}`);
-  const response = await fetch(url);
-  if (!response.ok || !response.body) {
-    throw new Error(`下载失败：${url}（HTTP ${response.status}）`);
+  if (curlAvailable === undefined) {
+    try {
+      await execFileAsync("curl", ["--version"]);
+      curlAvailable = true;
+    } catch {
+      curlAvailable = false;
+    }
   }
-
+  console.log(`⬇️  下载 ${url}`);
   await ensureDir(path.dirname(destination));
-  await Bun.write(destination, response);
+  if (curlAvailable && (process.env.CI || process.env.MIAOYU_USE_CURL === "1")) {
+    const args = [
+      "-L",
+      "--fail",
+      "--retry",
+      "5",
+      "--retry-delay",
+      "5",
+    ];
+    if (process.env.GITHUB_TOKEN && url.startsWith("https://github.com/")) {
+      args.push("-H", `Authorization: token ${process.env.GITHUB_TOKEN}`);
+      args.push("-H", "Accept: application/octet-stream");
+    }
+    args.push("-o", destination, url);
+    await execFileAsync("curl", args);
+  } else {
+    const response = await fetch(url);
+    if (!response.ok || !response.body) {
+      throw new Error(`下载失败：${url}（HTTP ${response.status}）`);
+    }
+    await Bun.write(destination, response);
+  }
 }
 
 async function extractArchive(archivePath: string, destination: string) {
@@ -90,18 +115,77 @@ async function extractArchive(archivePath: string, destination: string) {
   ]);
 }
 
-async function cleanupModelDir(directory: string) {
+async function cleanupModelDir(directory: string, allowed: string[]) {
   await rm(path.join(directory, ".git"), { recursive: true, force: true });
   await rm(path.join(directory, ".gitignore"), { force: true });
+  const allowedSet = new Set(
+    allowed.map((item) => item.split(path.posix.sep).join(path.sep)),
+  );
+  await pruneExtraEntries(directory, directory, allowedSet);
+}
+
+async function pruneExtraEntries(
+  root: string,
+  current: string,
+  allowed: Set<string>,
+) {
+  const entries = await readdir(current, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(current, entry.name);
+    const relative = path.relative(root, fullPath);
+    if (entry.isDirectory()) {
+      await pruneExtraEntries(root, fullPath, allowed);
+      const remaining = await readdir(fullPath);
+      if (remaining.length === 0) {
+        await rm(fullPath, { recursive: true, force: true });
+      }
+      continue;
+    }
+    if (!allowed.has(relative)) {
+      await rm(fullPath, { force: true });
+    }
+  }
 }
 
 async function extractBundle(archivePath: string) {
-  await rm(MODELS_ROOT, { recursive: true, force: true });
-  await ensureDir(MODELS_ROOT);
-  await execFileAsync("tar", ["-xjf", archivePath, "-C", MODELS_ROOT]);
-  for (const dir of MODEL_DIRS) {
-    await cleanupModelDir(path.join(MODELS_ROOT, dir));
+  const baseArgs = ["-xjf", archivePath, "-C", MODELS_ROOT] as const;
+  const stripCandidates = [1, 2, 0];
+
+  const hasAllModelDirs = async () => {
+    const results = await Promise.all(
+      MODEL_DIRS.map((dir) => exists(path.join(MODELS_ROOT, dir))),
+    );
+    return results.every(Boolean);
+  };
+
+  for (const strip of stripCandidates) {
+    await rm(MODELS_ROOT, { recursive: true, force: true });
+    await ensureDir(MODELS_ROOT);
+
+    const args =
+      strip > 0
+        ? [...baseArgs, `--strip-components=${strip}`]
+        : [...baseArgs];
+
+    try {
+      await execFileAsync("tar", args);
+    } catch (error) {
+      console.warn(
+        `⚠️ 解压模型包失败（strip-components=${strip}）：`,
+        error instanceof Error ? error.message : error,
+      );
+      continue;
+    }
+
+    if (await hasAllModelDirs()) {
+      for (const dir of MODEL_DIRS) {
+      await cleanupModelDir(path.join(MODELS_ROOT, dir), DOWNLOADS.find((d) => d.key === dir)?.files ?? []);
+      }
+      return;
+    }
   }
+
+  throw new Error("模型包结构不符合预期，缺少 asr/punc/vad 目录。");
 }
 
 async function tryDownloadBundle(): Promise<boolean> {
@@ -149,7 +233,7 @@ async function processDownload(task: DownloadTask) {
       await downloadFile(task.url, tempArchive);
       console.log(`📦 解压 ${task.key} 模型…`);
       await extractArchive(tempArchive, destDir);
-      await cleanupModelDir(destDir);
+      await cleanupModelDir(destDir, task.files);
     } finally {
       await rm(tempArchive, { force: true });
     }
@@ -157,7 +241,7 @@ async function processDownload(task: DownloadTask) {
     const filename = task.files[0];
     const target = path.join(destDir, filename);
     await downloadFile(task.url, target);
-    await cleanupModelDir(destDir);
+    await cleanupModelDir(destDir, task.files);
   }
 
   console.log(`✅ ${task.key} 模型准备完成。`);

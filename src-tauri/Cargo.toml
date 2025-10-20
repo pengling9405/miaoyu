@@ -1,45 +1,29 @@
 [package]
 name = "miaoyu-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "智能语音输入桌面应用"
 authors = ["you"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "miaoyu_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 dotenvy = "0.15.7"
+serde_json = "1"
+dirs = "6"
 
 [dependencies]
-tauri = { version = "2", features = [
-    "macos-private-api",
-    "tray-icon",
-    "image-png",
-    "devtools",
-] }
+tauri = { version = "2", features = ["macos-private-api","tray-icon","image-png","devtools"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 specta = "=2.0.0-rc.22"
 specta-typescript = "0.0.9"
-tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
-tokio = { version = "1.47.1", features = [
-    "macros",
-    "process",
-    "fs",
-    "sync",
-    "rt",
-    "rt-multi-thread",
-    "time",
-]  }
+tauri-specta = { version = "=2.0.0-rc.21", features = ["derive","typescript"] }
+tokio = { version = "1.47.1", features = ["macros","process","fs","sync","rt","rt-multi-thread","time"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 tracing-appender = "0.2.3"
@@ -49,7 +33,6 @@ anyhow = "1.0"
 cpal = "0.16.0"
 tauri-plugin-http = "2.5.2"
 reqwest = { version = "0.12.23", features = ["json"] }
-sherpa-rs = { version = "0.6.8", default-features = false }
 tauri-plugin-global-shortcut = "2.3.0"
 tauri-plugin-clipboard-manager = "2.3.0"
 global-hotkey = "0.7.0"
@@ -60,22 +43,19 @@ dotenvy = "0.15.7"
 tauri-plugin-store = "2.4.0"
 tauri-plugin-updater = "2.9.0"
 tauri-plugin-autostart = "2"
+sherpa-rs = { git = "https://github.com/zhanyuilong/sherpa-rs", branch = "main", default-features = false, features = ["download-binaries"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58.0", features = [
-    "Win32_Foundation",
-    "Win32_UI_Input_KeyboardAndMouse"
-] }
+windows = { version = "0.58.0", features = ["Win32_Foundation","Win32_UI_Input_KeyboardAndMouse"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10.0"
 core-graphics = "0.23.1"
 cidre = "0.11.3"
 
-# Optimize for smaller binary size in release builds
 [profile.release]
-codegen-units = 1        # Better LLVM optimization (slower build, smaller binary)
-lto = true               # Link-time optimizations
-opt-level = "s"          # Optimize for size over speed
-panic = "abort"          # Don't include panic unwinding code
-strip = true             # Remove debug symbols
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
