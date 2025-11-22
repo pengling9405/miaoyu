@@ -12,18 +12,14 @@
     "active": true,
     "targets": ["msi", "nsis"],
     "createUpdaterArtifacts": true,
-    "externalBin": [
-      "onnxruntime.dll",
-      "onnxruntime_providers_shared.dll",
-      "sherpa-onnx-c-api.dll",
-      "VCRUNTIME140.dll",
-      "VCRUNTIME140_1.dll",
-      "MSVCP140.dll"
-    ],
+    "externalBin": [],
     "resources": [
       "onnxruntime.dll",
       "sherpa-onnx-c-api.dll",
-      "onnxruntime_providers_shared.dll"
+      "onnxruntime_providers_shared.dll",
+      "VCRUNTIME140.dll",
+      "VCRUNTIME140_1.dll",
+      "MSVCP140.dll"
     ],
     "icon": ["icons/icon.ico"],
     "windows": {
