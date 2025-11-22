@@ -1,23 +1,21 @@
 import CheckIcon from "@heroicons/react/24/outline/CheckIcon";
 import XMarkIcon from "@heroicons/react/24/solid/XMarkIcon";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { DEFAULT_DICTATION_HOTKEY } from "~/constants/hotkeys";
 import type { Hotkey } from "~/lib/tauri";
 import { cn } from "~/lib/utils";
 
 type Props = {
 	currentHotkey?: Hotkey;
+	defaultHotkey?: Hotkey;
 	onUpdate: (hotkey: Hotkey | null) => Promise<void>;
 };
 
-const DEFAULT_START_HOTKEY: Hotkey = {
-	code: "Space",
-	meta: false,
-	ctrl: false,
-	alt: true,
-	shift: false,
-};
-
-export function HotkeySetting({ currentHotkey, onUpdate }: Props) {
+export function HotkeySetting({
+	currentHotkey,
+	onUpdate,
+	defaultHotkey,
+}: Props) {
 	const [mode, setMode] = useState<"view" | "listening" | "confirm">("view");
 	const [draftHotkey, setDraftHotkey] = useState<Hotkey | null>(null);
 	const [saving, setSaving] = useState(false);
@@ -69,8 +67,8 @@ export function HotkeySetting({ currentHotkey, onUpdate }: Props) {
 		if (mode === "confirm" && draftHotkey) {
 			return draftHotkey;
 		}
-		return currentHotkey ?? DEFAULT_START_HOTKEY;
-	}, [mode, draftHotkey, currentHotkey]);
+		return currentHotkey ?? defaultHotkey ?? DEFAULT_DICTATION_HOTKEY;
+	}, [mode, draftHotkey, currentHotkey, defaultHotkey]);
 
 	const startListening = () => {
 		setDraftHotkey(null);

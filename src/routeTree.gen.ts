@@ -9,104 +9,180 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SetupRouteImport } from './routes/setup'
-import { Route as FeedbackRouteImport } from './routes/feedback'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as TranscribingRouteImport } from './routes/transcribing'
+import { Route as RecordingRouteImport } from './routes/recording'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as NotificationRouteImport } from './routes/notification'
+import { Route as dashboardIndexRouteImport } from './routes/(dashboard)/index'
+import { Route as dashboardSettingsRouteImport } from './routes/(dashboard)/settings'
+import { Route as dashboardModelsRouteImport } from './routes/(dashboard)/models'
 
-const SetupRoute = SetupRouteImport.update({
-  id: '/setup',
-  path: '/setup',
+const TranscribingRoute = TranscribingRouteImport.update({
+  id: '/transcribing',
+  path: '/transcribing',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FeedbackRoute = FeedbackRouteImport.update({
-  id: '/feedback',
-  path: '/feedback',
+const RecordingRoute = RecordingRouteImport.update({
+  id: '/recording',
+  path: '/recording',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationRoute = NotificationRouteImport.update({
+  id: '/notification',
+  path: '/notification',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const dashboardIndexRoute = dashboardIndexRouteImport.update({
+  id: '/(dashboard)/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsIndexRoute = SettingsIndexRouteImport.update({
-  id: '/settings/',
-  path: '/settings/',
+const dashboardSettingsRoute = dashboardSettingsRouteImport.update({
+  id: '/(dashboard)/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const dashboardModelsRoute = dashboardModelsRouteImport.update({
+  id: '/(dashboard)/models',
+  path: '/models',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/feedback': typeof FeedbackRoute
-  '/setup': typeof SetupRoute
-  '/settings': typeof SettingsIndexRoute
+  '/notification': typeof NotificationRoute
+  '/onboarding': typeof OnboardingRoute
+  '/recording': typeof RecordingRoute
+  '/transcribing': typeof TranscribingRoute
+  '/models': typeof dashboardModelsRoute
+  '/settings': typeof dashboardSettingsRoute
+  '/': typeof dashboardIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/feedback': typeof FeedbackRoute
-  '/setup': typeof SetupRoute
-  '/settings': typeof SettingsIndexRoute
+  '/notification': typeof NotificationRoute
+  '/onboarding': typeof OnboardingRoute
+  '/recording': typeof RecordingRoute
+  '/transcribing': typeof TranscribingRoute
+  '/models': typeof dashboardModelsRoute
+  '/settings': typeof dashboardSettingsRoute
+  '/': typeof dashboardIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/feedback': typeof FeedbackRoute
-  '/setup': typeof SetupRoute
-  '/settings/': typeof SettingsIndexRoute
+  '/notification': typeof NotificationRoute
+  '/onboarding': typeof OnboardingRoute
+  '/recording': typeof RecordingRoute
+  '/transcribing': typeof TranscribingRoute
+  '/(dashboard)/models': typeof dashboardModelsRoute
+  '/(dashboard)/settings': typeof dashboardSettingsRoute
+  '/(dashboard)/': typeof dashboardIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/feedback' | '/setup' | '/settings'
+  fullPaths:
+    | '/notification'
+    | '/onboarding'
+    | '/recording'
+    | '/transcribing'
+    | '/models'
+    | '/settings'
+    | '/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/feedback' | '/setup' | '/settings'
-  id: '__root__' | '/' | '/feedback' | '/setup' | '/settings/'
+  to:
+    | '/notification'
+    | '/onboarding'
+    | '/recording'
+    | '/transcribing'
+    | '/models'
+    | '/settings'
+    | '/'
+  id:
+    | '__root__'
+    | '/notification'
+    | '/onboarding'
+    | '/recording'
+    | '/transcribing'
+    | '/(dashboard)/models'
+    | '/(dashboard)/settings'
+    | '/(dashboard)/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  FeedbackRoute: typeof FeedbackRoute
-  SetupRoute: typeof SetupRoute
-  SettingsIndexRoute: typeof SettingsIndexRoute
+  NotificationRoute: typeof NotificationRoute
+  OnboardingRoute: typeof OnboardingRoute
+  RecordingRoute: typeof RecordingRoute
+  TranscribingRoute: typeof TranscribingRoute
+  dashboardModelsRoute: typeof dashboardModelsRoute
+  dashboardSettingsRoute: typeof dashboardSettingsRoute
+  dashboardIndexRoute: typeof dashboardIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/setup': {
-      id: '/setup'
-      path: '/setup'
-      fullPath: '/setup'
-      preLoaderRoute: typeof SetupRouteImport
+    '/transcribing': {
+      id: '/transcribing'
+      path: '/transcribing'
+      fullPath: '/transcribing'
+      preLoaderRoute: typeof TranscribingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/feedback': {
-      id: '/feedback'
-      path: '/feedback'
-      fullPath: '/feedback'
-      preLoaderRoute: typeof FeedbackRouteImport
+    '/recording': {
+      id: '/recording'
+      path: '/recording'
+      fullPath: '/recording'
+      preLoaderRoute: typeof RecordingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notification': {
+      id: '/notification'
+      path: '/notification'
+      fullPath: '/notification'
+      preLoaderRoute: typeof NotificationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(dashboard)/': {
+      id: '/(dashboard)/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof dashboardIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings/': {
-      id: '/settings/'
+    '/(dashboard)/settings': {
+      id: '/(dashboard)/settings'
       path: '/settings'
       fullPath: '/settings'
-      preLoaderRoute: typeof SettingsIndexRouteImport
+      preLoaderRoute: typeof dashboardSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(dashboard)/models': {
+      id: '/(dashboard)/models'
+      path: '/models'
+      fullPath: '/models'
+      preLoaderRoute: typeof dashboardModelsRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  FeedbackRoute: FeedbackRoute,
-  SetupRoute: SetupRoute,
-  SettingsIndexRoute: SettingsIndexRoute,
+  NotificationRoute: NotificationRoute,
+  OnboardingRoute: OnboardingRoute,
+  RecordingRoute: RecordingRoute,
+  TranscribingRoute: TranscribingRoute,
+  dashboardModelsRoute: dashboardModelsRoute,
+  dashboardSettingsRoute: dashboardSettingsRoute,
+  dashboardIndexRoute: dashboardIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

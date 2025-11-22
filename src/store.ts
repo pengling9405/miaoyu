@@ -97,4 +97,10 @@ function declareStore<T extends object>(name: string) {
 }
 
 export const hotkeysStore = declareStore<HotkeysStore>("hotkeys");
-export const settingsStore = declareStore<SettingsStore>("settings");
+
+export type AppSettingsStore = SettingsStore & {
+	cancelWithEscape?: boolean | null;
+	appLanguage?: "zh-CN" | "en-US";
+};
+
+export const settingsStore = declareStore<AppSettingsStore>("settings");
