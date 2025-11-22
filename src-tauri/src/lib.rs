@@ -172,8 +172,8 @@ pub async fn run(_logging_handle: LoggingHandle) {
                 let app = app_handle.clone();
                 async move {
                     let onboarding_completed = settings::is_onboarding_completed(&app);
-                    let permissions_ready = permissions.microphone.permitted()
-                        && permissions.accessibility.permitted();
+                    let permissions_ready =
+                        permissions.microphone.permitted() && permissions.accessibility.permitted();
                     if onboarding_completed && permissions_ready {
                         let _ = ShowAppWindow::Dashboard.show(&app).await;
                     } else {
@@ -242,7 +242,7 @@ pub async fn run(_logging_handle: LoggingHandle) {
         .build(tauri_context)
         .expect("error while running tauri application")
         .run(move |handle, event| match event {
-            tauri::RunEvent::Resumed { .. } => {
+            tauri::RunEvent::Resumed => {
                 if !resume_flag_run.swap(true, Ordering::SeqCst) {
                     let app = handle.clone();
                     tauri::async_runtime::spawn(async move {

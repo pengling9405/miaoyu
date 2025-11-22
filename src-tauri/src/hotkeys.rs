@@ -72,30 +72,24 @@ impl HotkeysStore {
     }
 
     pub fn ensure_defaults(&mut self) {
-        if !self.hotkeys.contains_key(&HotkeyAction::StartDictating) {
-            self.hotkeys.insert(
-                HotkeyAction::StartDictating,
-                Hotkey {
-                    code: Code::Space,
-                    meta: false,
-                    ctrl: false,
-                    alt: true,
-                    shift: false,
-                },
-            );
-        }
-        if !self.hotkeys.contains_key(&HotkeyAction::StartVoiceDiary) {
-            self.hotkeys.insert(
-                HotkeyAction::StartVoiceDiary,
-                Hotkey {
-                    code: Code::Space,
-                    meta: false,
-                    ctrl: false,
-                    alt: true,
-                    shift: true,
-                },
-            );
-        }
+        self.hotkeys
+            .entry(HotkeyAction::StartDictating)
+            .or_insert(Hotkey {
+                code: Code::Space,
+                meta: false,
+                ctrl: false,
+                alt: true,
+                shift: false,
+            });
+        self.hotkeys
+            .entry(HotkeyAction::StartVoiceDiary)
+            .or_insert(Hotkey {
+                code: Code::Space,
+                meta: false,
+                ctrl: false,
+                alt: true,
+                shift: true,
+            });
     }
 }
 

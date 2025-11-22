@@ -3,7 +3,6 @@ use std::sync::Arc;
 use chrono::Local;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use serde_json;
 use specta::Type;
 use tauri::{AppHandle, Wry};
 use tauri_plugin_store::{Store, StoreExt};

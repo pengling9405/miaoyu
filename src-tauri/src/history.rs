@@ -11,7 +11,6 @@ use tokio::{fs, task::spawn_blocking};
 use uuid::Uuid;
 
 use crate::models;
-use hound;
 
 const HISTORY_DB_PATH: &str = "history/history.db";
 
@@ -39,19 +38,14 @@ impl HistoryKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum LlmPolishStatus {
     Success,
+    #[default]
     Skipped,
     QuotaExceeded,
     Failed,
-}
-
-impl Default for LlmPolishStatus {
-    fn default() -> Self {
-        LlmPolishStatus::Skipped
-    }
 }
 
 impl LlmPolishStatus {
@@ -350,7 +344,7 @@ fn insert_history_entry(
         id,
         title: entry.title.clone(),
         text: entry.text.clone(),
-        kind: entry.kind.clone(),
+        kind: entry.kind,
         created_at,
         duration_seconds: entry.duration_seconds,
         audio_file_path: entry.audio_file_path.clone(),
@@ -403,11 +397,9 @@ fn clear_history(conn: &Connection) -> Result<Vec<String>, String> {
         .query_map([], |row| row.get::<_, String>(0))
         .map_err(|e| format!("读取历史音频失败: {e}"))?;
     let mut files = Vec::new();
-    for row in rows {
-        if let Ok(path) = row {
-            if !path.trim().is_empty() {
-                files.push(path);
-            }
+    for path in rows.flatten() {
+        if !path.trim().is_empty() {
+            files.push(path);
         }
     }
     conn.execute("DELETE FROM history_entries", [])

@@ -44,7 +44,7 @@ pub async fn show_notification(
     );
 
     // 所有通知类型都播放提示音
-    match tokio::task::spawn_blocking(|| AudioDictating::play_notification_sound()).await {
+    match tokio::task::spawn_blocking(AudioDictating::play_notification_sound).await {
         Ok(Ok(())) => {}
         Ok(Err(play_error)) => {
             tracing::warn!(

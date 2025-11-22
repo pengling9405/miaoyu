@@ -81,7 +81,7 @@ async fn start_recording(app: AppHandle, history_kind: HistoryKind) -> Result<()
     }
     let _ = windows::sync_audio_overlay(&app, AudioState::Recording).await;
 
-    if let Err(error) = play_sound_blocking(|| AudioDictating::play_start_sound()).await {
+    if let Err(error) = play_sound_blocking(AudioDictating::play_start_sound).await {
         warn!(
             target = "miaoyu_audio",
             error = %error,
@@ -150,7 +150,7 @@ pub async fn stop_dictating(app: AppHandle) -> Result<transcribing::Transcriptio
     let _ = windows::sync_audio_overlay(&app, AudioState::Transcribing).await;
 
     // 用户第二次按下快捷键时立即播结束音效（而不是等转写完成）
-    if let Err(error) = play_sound_blocking(|| AudioDictating::play_stop_sound()).await {
+    if let Err(error) = play_sound_blocking(AudioDictating::play_stop_sound).await {
         warn!(
             target = "miaoyu_audio",
             error = %error,
@@ -289,7 +289,7 @@ pub async fn cancel_dictating(app: AppHandle) -> Result<(), String> {
         guard.dictating_stream = None;
         guard.state = AudioState::Idle;
     }
-    if let Err(error) = play_sound_blocking(|| AudioDictating::play_stop_sound()).await {
+    if let Err(error) = play_sound_blocking(AudioDictating::play_stop_sound).await {
         warn!(
             target = "miaoyu_audio",
             error = %error,
@@ -298,12 +298,6 @@ pub async fn cancel_dictating(app: AppHandle) -> Result<(), String> {
     }
     let _ = windows::sync_audio_overlay(&app, AudioState::Idle).await;
     Ok(())
-}
-
-pub async fn get_audio_state(app: &AppHandle<Wry>) -> AudioState {
-    let state = app.state::<AppState>();
-    let guard = state.audio.lock().await;
-    guard.state.clone()
 }
 
 async fn set_idle_state(app: &AppHandle<Wry>) {
@@ -341,7 +335,7 @@ async fn log_history_entry(
 
     let duration_seconds = transcription
         .duration_ms
-        .map(|ms| ((ms as u64 + 999) / 1000).min(u32::MAX as u64) as u32)
+        .map(|ms| (ms as u64).div_ceil(1000).min(u32::MAX as u64) as u32)
         .unwrap_or(0);
 
     let words = transcription.text.chars().count() as u32;
@@ -365,9 +359,7 @@ async fn log_history_entry(
         llm_polish_error: llm_outcome.error.clone(),
     };
 
-    history::add_history_entry(app.clone(), entry)
-        .await
-        .map_err(|e| e)?;
+    history::add_history_entry(app.clone(), entry).await?;
 
     if let Err(error) = models::record_asr_usage(app, &asr_variant_id, duration_seconds) {
         warn!(
@@ -485,7 +477,7 @@ async fn play_sound_blocking<F>(play_fn: F) -> Result<(), String>
 where
     F: FnOnce() -> Result<(), String> + Send + 'static,
 {
-    tokio::task::spawn_blocking(move || play_fn())
+    tokio::task::spawn_blocking(play_fn)
         .await
         .map_err(|e| format!("播放音效失败: {e}"))?
 }

@@ -9,7 +9,7 @@ const END_SOUND_BYTES: &[u8] =
     include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/sounds/end.mp3"));
 const NOTIFICATION_SOUND_BYTES: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/sounds/notification.ogg"
+    "/sounds/notification.mp3"
 ));
 
 use rodio::{Decoder, OutputStream, Sink};
