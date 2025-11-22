@@ -167,6 +167,8 @@ jobs:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
           CARGO_HOME: C:\c
           CARGO_TARGET_DIR: C:\t
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-Ctarget-feature=+crt-static"
+          CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS: "-Ctarget-feature=+crt-static"
         run: cargo build --manifest-path src-tauri/Cargo.toml --release --target ${{ matrix.settings.target }} --verbose
 
       - name: Build Tauri app (.app only)
@@ -361,6 +363,8 @@ jobs:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
           CARGO_HOME: C:\c
           CARGO_TARGET_DIR: C:\t
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-Ctarget-feature=+crt-static"
+          CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS: "-Ctarget-feature=+crt-static"
           SHERPA_BUILD_DEBUG: "1"
           SHERPA_BUILD_SHARED_LIBS: "1"
         run: |

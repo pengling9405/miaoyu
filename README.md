@@ -97,6 +97,7 @@ bun tauri build --config src-tauri/tauri.prod.conf.json
 | 问题 | 排查建议 |
 |------|----------|
 | 为什么没有语音识别入口？ | 确认「模型管理」已下载离线模型；安装包不带模型，需联网下载一次，模型存放在系统应用数据目录。 |
+| Windows 安装提示缺少 VCRUNTIME140.dll | 下载最新安装包重新安装（已静态链接 MSVC 运行时）；旧版本或自编译时，可先安装 Visual C++ Redistributable 2015-2022 后再试。 |
 
 更多调试日志可在 `src-tauri/tauri.conf.json` 中开启。
 
