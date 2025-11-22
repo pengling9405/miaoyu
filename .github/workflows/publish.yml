@@ -9,6 +9,7 @@ on:
 env:
   APP_CARGO_TOML: src-tauri/Cargo.toml
   APP_NAME: miaoyu
+  IS_PRERELEASE: ${{ contains(github.ref_name, '-pre') }}
 
 jobs:
   draft:
@@ -56,7 +57,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          prerelease: false
+          prerelease: ${{ env.IS_PRERELEASE == 'true' }}
           tag_name: v${{ steps.read_version.outputs.value }}
           name: v${{ steps.read_version.outputs.value }}
           body: ${{ steps.changelog.outputs.content }}
@@ -152,6 +153,7 @@ jobs:
           cd src-tauri
           {
             printf 'DEEPSEEK_API_KEY=%s\n' "${{ secrets.DEEPSEEK_API_KEY }}"
+            printf 'MODELSCOPE_ACCESS_TOKEN=%s\n' "${{ secrets.MODELSCOPE_ACCESS_TOKEN }}"
           } > .env
 
       - name: Build Rust artifacts (non-Windows)
@@ -472,8 +474,11 @@ jobs:
             });
 
       - name: Summary
+        env:
+          IS_PRERELEASE: ${{ env.IS_PRERELEASE }}
         run: |
-          echo "### 🎉 Release Published" >> $GITHUB_STEP_SUMMARY
+          TITLE=$([ "${IS_PRERELEASE}" = "true" ] && echo "Pre-release Published" || echo "Release Published")
+          echo "### 🎉 ${TITLE}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Version: **v${{ needs.draft.outputs.version }}**" >> $GITHUB_STEP_SUMMARY
           echo "Release URL: ${{ needs.draft.outputs.release_url }}" >> $GITHUB_STEP_SUMMARY

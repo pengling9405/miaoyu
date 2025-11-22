@@ -6,6 +6,9 @@ fn main() {
     if let Ok(key) = env::var("DEEPSEEK_API_KEY") {
         println!("cargo:rustc-env=DEEPSEEK_API_KEY={}", key);
     }
+    if let Ok(key) = env::var("MODELSCOPE_ACCESS_TOKEN") {
+        println!("cargo:rustc-env=MODELSCOPE_ACCESS_TOKEN={}", key);
+    }
     println!("cargo:rerun-if-changed=build.rs");
     tauri_build::build();
 }

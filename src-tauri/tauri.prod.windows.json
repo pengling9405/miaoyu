@@ -14,7 +14,6 @@
     "createUpdaterArtifacts": true,
     "externalBin": [],
     "resources": [
-      "models/**/*",
       "onnxruntime.dll",
       "sherpa-onnx-c-api.dll",
       "onnxruntime_providers_shared.dll"

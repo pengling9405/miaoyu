@@ -4,7 +4,7 @@
   </p>
   <h1 align="center"><b>妙语</b></h1>
   <p align="center">
-    面向中文用户的离线智能语音工作流
+    智能语音输入，妙语亦可生花。
   </p>
 </p>
 
@@ -19,10 +19,8 @@
 
 ## 🪶 简介
 
-**妙语** 是一款专注中文语境的桌面语音输入工具。
-它将语音录制、离线识别、智能标点和自动粘贴串成一条工作流，让你开口即可成文，并支持可选的 LLM 润色。
-
-与传统云端语音服务不同，妙语默认在本地推理完成整个 ASR 流程，确保隐私、安全和低延迟。
+**妙语** 智能语音输入，妙语亦可生花。
+与传统云端语音服务不同，妙语默认在本地推理完成整个 ASR 流程，确保隐私、安全和低延迟以及智能AI 润色，让你的语音输入妙语生花。
 
 ---
 
@@ -31,49 +29,7 @@
 | 能力 | 说明 |
 |------|------|
 | 📴 **全离线语音识别** | 内置 Paraformer Small + sherpa-rs，在本地 CPU 上完成推理，无需网络。 |
-| 🎯 **Silero VAD 精准检测** | Silero VAD 切分语音片段，自动过滤静音段，避免冗余文本。 |
-| 📝 **智能标点补全** | ct-transformer 标点模型让文本更易读（敬请期待下一版本接入）。 |
-| 🪄 **可选 LLM 润色** | 可接入任何兼容 OpenAI API 的模型（如 DeepSeek、qwen、Kimi 等），用于对识别文本做风格化润色。 |
 | ⌨️ **跨应用输入** | 通过全局快捷键触发录音，识别结果自动写入剪贴板并粘贴到光标所在位置。 |
-
----
-
-## 📦 模型与目录结构
-
-所有模型按照功能分类存放在 `src-tauri/models` 下：
-
-```
-src-tauri/models/
-├── asr/
-│   ├── model.int8.onnx      # Paraformer ASR 模型
-│   ├── tokens.txt           # ASR 词表
-│   └── config.yaml          # 原始模型配置（可选）
-├── vad/
-│   └── silero_vad.onnx      # Silero VAD 模型
-└── punc/
-    ├── model.onnx           # ct-transformer 标点模型
-    ├── tokens.json          # 标点词表
-    └── config.yaml          # 原始模型配置（可选）
-```
-
-> 应用运行时会将模型缓存到 `AppData/models` 下。开发环境也可以提前将文件放入 `src-tauri/models`，首次启动会自动拷贝到缓存目录。
-
-### 手动下载示例
-
-```bash
-MODEL_DIR=sherpa-onnx-paraformer-zh-small-2024-03-09
-
-# Paraformer Small（16 kHz，int8）
-mkdir -p src-tauri/models/$MODEL_DIR
-curl -L -o /tmp/paraformer-small.tar.bz2 \
-  https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-zh-small-2024-03-09.tar.bz2
-tar -xjf /tmp/paraformer-small.tar.bz2 -C src-tauri/models/$MODEL_DIR --strip-components=1
-
-# 标点与 VAD（如需手动替换，可参考官方模型包）
-```
-
-> 推荐在「模型管理」页面直接点击“下载模型”，应用会自动将文件安装到 AppData 目录。
-
 ---
 
 ## 🚀 快速开始
@@ -102,11 +58,14 @@ cp .env.example .env
 
 # 编辑 .env，添加：
 DEEPSEEK_API_KEY=your_api_key_here
+MODELSCOPE_ACCESS_TOKEN=your_api_key_here
 ```
 
-### 准备模型
+### 离线模型下载与存放
 
-语音识别功能暂停期间，无需在 `src-tauri/models` 放置任何 ASR/VAD 模型文件。
+- 安装包不包含语音模型；首次使用请在应用内「模型管理」页点击下载，模型会自动写入系统的应用数据目录（如 Windows 的 AppData、macOS 的 Application Support 等）。
+- 开发模式同样使用系统数据目录缓存模型。
+- 如下载失败，可将同名模型手动放入应用数据目录后重启应用。
 
 ### 启动开发模式
 
@@ -137,7 +96,7 @@ bun tauri build --config src-tauri/tauri.prod.conf.json
 
 | 问题 | 排查建议 |
 |------|----------|
-| 为什么没有语音识别入口？ | 语音模块正在重构，当前版本仅可设置文本模型。后续版本恢复后会在更新日志中说明。 |
+| 为什么没有语音识别入口？ | 确认「模型管理」已下载离线模型；安装包不带模型，需联网下载一次，模型存放在系统应用数据目录。 |
 
 更多调试日志可在 `src-tauri/tauri.conf.json` 中开启。
 
@@ -183,5 +142,3 @@ bun run lint
 cargo fmt
 cargo check
 ```
-
-期待与你一起把妙语打造成更好用的中文语音工作流工具。
