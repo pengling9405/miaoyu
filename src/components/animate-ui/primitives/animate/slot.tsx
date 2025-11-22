@@ -71,14 +71,9 @@ function Slot<T extends HTMLElement = HTMLElement>({
 		isMotionComponent(children.type);
 
 	const mergedProps = mergeProps(childProps, props);
-
-	const Base = React.useMemo(
-		() =>
-			isAlreadyMotion
-				? (children.type as React.ElementType)
-				: motion.create(children.type as React.ElementType),
-		[isAlreadyMotion, children.type],
-	);
+	const Base = isAlreadyMotion
+		? (children.type as React.ElementType)
+		: motion.create(children.type as React.ElementType);
 
 	return (
 		<Base {...mergedProps} ref={mergeRefs(childRef as React.Ref<T>, ref)} />

@@ -88,7 +88,7 @@ export function useAutoHeight<T extends HTMLElement = HTMLDivElement>(
 			ro.disconnect();
 			roRef.current = null;
 		};
-	}, [deps, measure, options.includeParentBox]);
+	}, [...(deps ?? []), measure, options.includeParentBox]);
 
 	React.useLayoutEffect(() => {
 		if (height === 0) {
