@@ -12,7 +12,14 @@
     "active": true,
     "targets": ["msi", "nsis"],
     "createUpdaterArtifacts": true,
-    "externalBin": [],
+    "externalBin": [
+      "onnxruntime.dll",
+      "onnxruntime_providers_shared.dll",
+      "sherpa-onnx-c-api.dll",
+      "VCRUNTIME140.dll",
+      "VCRUNTIME140_1.dll",
+      "MSVCP140.dll"
+    ],
     "resources": [
       "onnxruntime.dll",
       "sherpa-onnx-c-api.dll",

@@ -331,7 +331,8 @@ jobs:
             "C:\t\$env:TARGET\release\deps",
             "src-tauri\target\$env:TARGET\release",
             "src-tauri\target\$env:TARGET\release\deps",
-            "src-tauri\bin"
+            "src-tauri\bin",
+            "C:\Windows\System32"
           ) | Where-Object { Test-Path $_ } | Select-Object -Unique
 
           Write-Host "Search candidates:"
@@ -341,7 +342,10 @@ jobs:
           $need = @(
             @{ pat = "onnxruntime.dll";                  out = "onnxruntime.dll" },
             @{ pat = "onnxruntime_providers_shared.dll"; out = "onnxruntime_providers_shared.dll" },
-            @{ pat = "sherpa-onnx-c-api*.dll";           out = "sherpa-onnx-c-api.dll" }  # ← 通配 + 统一命名
+            @{ pat = "sherpa-onnx-c-api*.dll";           out = "sherpa-onnx-c-api.dll" },  # ← 通配 + 统一命名
+            @{ pat = "VCRUNTIME140.dll";                 out = "VCRUNTIME140.dll" },
+            @{ pat = "VCRUNTIME140_1.dll";               out = "VCRUNTIME140_1.dll" },
+            @{ pat = "MSVCP140.dll";                     out = "MSVCP140.dll" }
           )
 
           foreach ($n in $need) {
