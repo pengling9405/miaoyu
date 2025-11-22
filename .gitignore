@@ -27,3 +27,4 @@ dist-ssr
 *.p8
 src-tauri/models/
 src-tauri/bin/
+.tanstack
