@@ -98,29 +98,34 @@ jobs:
         with:
           targets: ${{ matrix.settings.target }}
 
+      - name: Enable Git long paths (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: git config --global core.longpaths true
+
+      - name: Configure Cargo dirs (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          echo "CARGO_HOME=C:\c" >> $env:GITHUB_ENV
+          echo "CARGO_TARGET_DIR=C:\t" >> $env:GITHUB_ENV
+          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS=-Ctarget-feature=+crt-static" >> $env:GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS=-Ctarget-feature=+crt-static" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force -Path C:\c | Out-Null
+          New-Item -ItemType Directory -Force -Path C:\t | Out-Null
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
           key: ${{ matrix.settings.target }}
 
-      - name: Enable Git long paths (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: git config --global core.longpaths true
-
-      - name: Prepare short dirs for Cargo (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path C:\c | Out-Null
-          New-Item -ItemType Directory -Force -Path C:\t | Out-Null
-
       - name: Clean previous Cargo git checkouts (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $p = "$env:USERPROFILE\.cargo\git\checkouts"
+          $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { "$env:USERPROFILE\\.cargo" }
+          $p = Join-Path $cargoHome "git\\checkouts"
           if (Test-Path $p) { Remove-Item -Recurse -Force $p }
 
       - name: Create Apple API key file

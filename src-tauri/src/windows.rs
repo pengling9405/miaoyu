@@ -143,6 +143,8 @@ impl ShowAppWindow {
                 #[cfg(target_os = "macos")]
                 let window = {
                     self.window_builder(app, "/")
+                        .inner_size(1400.0, 1200.0)
+                        .min_inner_size(1400.0, 1200.0)
                         .resizable(true)
                         .maximized(false)
                         .center()
@@ -160,7 +162,8 @@ impl ShowAppWindow {
                 #[cfg(not(target_os = "macos"))]
                 let window = self
                     .window_builder(app, "/")
-                    .inner_size(1024.0, 720.0)
+                    .inner_size(1400.0, 1200.0)
+                    .min_inner_size(1400.0, 1200.0)
                     .resizable(true)
                     .maximized(false)
                     .center()
