@@ -11,23 +11,28 @@ export const Route = createFileRoute("/notification")({
 });
 
 function NotificationComponent() {
-	const [notification, setNotification] = useState<ShowNotification | null>(null);
+	const [notification, setNotification] = useState<ShowNotification | null>(
+		null,
+	);
 
 	useEffect(() => {
 		let unlisten: (() => void) | null = null;
 
 		const setupListener = async () => {
-			unlisten = await listen<ShowNotification>("show-notification", (event) => {
-				const payload = event.payload;
-				setNotification(payload);
+			unlisten = await listen<ShowNotification>(
+				"show-notification",
+				(event) => {
+					const payload = event.payload;
+					setNotification(payload);
 
-				// 根据通知类型设置不同的显示时长（与后端保持一致）
-				const duration = payload.type === "error" ? 3000 : 2500;
+					// 根据通知类型设置不同的显示时长（与后端保持一致）
+					const duration = payload.type === "error" ? 3000 : 2500;
 
-				setTimeout(() => {
-					setNotification(null);
-				}, duration);
-			});
+					setTimeout(() => {
+						setNotification(null);
+					}, duration);
+				},
+			);
 		};
 
 		setupListener();
@@ -53,7 +58,9 @@ function NotificationComponent() {
 						<ExclamationCircleIcon
 							className={cn(
 								"size-4",
-								notification.type === "error" ? "text-destructive" : "text-violet-600",
+								notification.type === "error"
+									? "text-destructive"
+									: "text-violet-600",
 							)}
 						/>
 						{notification.message}
