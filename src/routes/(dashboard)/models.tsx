@@ -22,7 +22,7 @@ import {
   TabsList,
   TabsTrigger,
   TabsContents,
-} from "@/components/radix/tabs";
+} from "~/components/radix/tabs";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
