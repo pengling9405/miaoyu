@@ -146,24 +146,6 @@ jobs:
         shell: pwsh
         run: bun install
 
-      - name: Download models
-        if: runner.os != 'Windows'
-        run: bun run download-models
-
-      - name: Download models (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: bun run download-models
-
-      - name: Verify models
-        if: runner.os != 'Windows'
-        run: bun run check-models
-
-      - name: Verify models (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: bun run check-models
-
       - name: Create .env file
         shell: bash
         run: |
