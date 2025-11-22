@@ -11,7 +11,14 @@
   "app": {
     "macOSPrivateApi": true,
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "scope": [
+          "$APP/",
+          "$RESOURCE/",
+          "$APPDATA/history/**"
+        ]
+      }
     }
   },
   "plugins": {

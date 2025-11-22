@@ -10,11 +10,10 @@ use tauri_plugin_store::StoreExt;
 use tauri_specta::Event;
 
 use crate::{
-    audio::{
-        cancel_dictating, get_audio_state, start_dictating, stop_dictating, AudioState,
-        DictatingMode,
-    },
+    audio::{cancel_dictating, start_dictating, start_voice_diary, stop_dictating},
+    history::HistoryKind,
     windows::ShowAppWindow,
+    AppState, AudioState,
 };
 
 #[derive(Serialize, Deserialize, Type, PartialEq, Clone, Copy)]
@@ -53,6 +52,7 @@ impl From<Hotkey> for Shortcut {
 #[allow(clippy::enum_variant_names)]
 pub enum HotkeyAction {
     StartDictating,
+    StartVoiceDiary,
     #[serde(other)]
     Other,
 }
@@ -70,6 +70,33 @@ impl HotkeysStore {
 
         serde_json::from_value(store).map_err(|e| e.to_string())
     }
+
+    pub fn ensure_defaults(&mut self) {
+        if !self.hotkeys.contains_key(&HotkeyAction::StartDictating) {
+            self.hotkeys.insert(
+                HotkeyAction::StartDictating,
+                Hotkey {
+                    code: Code::Space,
+                    meta: false,
+                    ctrl: false,
+                    alt: true,
+                    shift: false,
+                },
+            );
+        }
+        if !self.hotkeys.contains_key(&HotkeyAction::StartVoiceDiary) {
+            self.hotkeys.insert(
+                HotkeyAction::StartVoiceDiary,
+                Hotkey {
+                    code: Code::Space,
+                    meta: false,
+                    ctrl: false,
+                    alt: true,
+                    shift: true,
+                },
+            );
+        }
+    }
 }
 
 impl Default for HotkeysStore {
@@ -83,6 +110,16 @@ impl Default for HotkeysStore {
                 ctrl: false,
                 alt: true,
                 shift: false,
+            },
+        );
+        hotkeys.insert(
+            HotkeyAction::StartVoiceDiary,
+            Hotkey {
+                code: Code::Space,
+                meta: false,
+                ctrl: false,
+                alt: true,
+                shift: true,
             },
         );
 
@@ -140,7 +177,7 @@ pub fn init(app: &AppHandle) {
     )
     .unwrap();
 
-    let store = match HotkeysStore::get(app) {
+    let mut store = match HotkeysStore::get(app) {
         Ok(Some(s)) => s,
         Ok(None) => HotkeysStore::default(),
         Err(e) => {
@@ -148,6 +185,7 @@ pub fn init(app: &AppHandle) {
             HotkeysStore::default()
         }
     };
+    store.ensure_defaults();
 
     let global_shortcut = app.global_shortcut();
     for hotkey in store.hotkeys.values() {
@@ -159,34 +197,37 @@ pub fn init(app: &AppHandle) {
 }
 
 async fn handle_hotkey(app: AppHandle, action: HotkeyAction) -> Result<(), String> {
-    match action {
-        HotkeyAction::StartDictating => {
-            // 获取当前音频状态
-            let current_state = get_audio_state().await;
+    let target_kind = match action {
+        HotkeyAction::StartDictating => HistoryKind::Dictation,
+        HotkeyAction::StartVoiceDiary => HistoryKind::Diary,
+        HotkeyAction::Other => return Ok(()),
+    };
 
-            match current_state {
-                AudioState::Idle => {
-                    // 空闲状态：开始录音（快捷键模式）
-                    start_dictating(app, DictatingMode::Hotkey).await
-                }
-                AudioState::Dictating { mode } => {
-                    if mode == DictatingMode::Normal {
-                        // Normal 模式的录音：忽略快捷键
-                        tracing::debug!(target = "miaoyu_audio", "Normal 模式录音中，忽略快捷键");
-                        Ok(())
-                    } else {
-                        // Hotkey 模式的录音：停止录音并转写
-                        stop_dictating(app, false).await.map(|_| ())
-                    }
-                }
-                AudioState::Transcribing => {
-                    // 转写状态：忽略快捷键（避免中断转写）
-                    tracing::debug!(target = "miaoyu_audio", "正在转写中，忽略快捷键");
-                    Ok(())
-                }
+    let state = app.state::<AppState>();
+    let (current_state, current_kind) = {
+        let guard = state.audio.lock().await;
+        (guard.state.clone(), guard.history_kind)
+    };
+
+    match current_state {
+        AudioState::Idle => match target_kind {
+            HistoryKind::Dictation => start_dictating(app).await,
+            HistoryKind::Diary => start_voice_diary(app).await,
+        },
+        AudioState::Recording => {
+            if current_kind != target_kind {
+                tracing::debug!(
+                    target = "miaoyu_hotkeys",
+                    current = ?current_kind,
+                    requested = ?target_kind,
+                    "Ignore hotkey while recording other mode"
+                );
+                return Ok(());
             }
+
+            stop_dictating(app).await.map(|_| ())
         }
-        HotkeyAction::Other => Ok(()),
+        AudioState::Transcribing => Ok(()),
     }
 }
 

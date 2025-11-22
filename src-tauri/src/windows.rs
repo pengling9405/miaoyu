@@ -1,23 +1,29 @@
 use anyhow::anyhow;
 #[cfg(target_os = "macos")]
 use cidre::ns;
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior};
 use serde::Deserialize;
 use specta::Type;
 use std::{path::PathBuf, str::FromStr};
 use tauri::{
-    AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
+    AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, Wry,
 };
 use tracing::warn;
 
-use crate::settings::{AppTheme, AudioFlowPanelPosition, SettingsStore};
+use crate::{settings::AppTheme, AppState, AudioState};
 
-#[derive(Clone, Deserialize, Type)]
+const AUDIO_BAR_BOTTOM_MARGIN: i32 = 40;
+
+#[derive(Clone, Deserialize, Type, PartialEq, Eq)]
 pub enum AppWindowId {
-    Setup,
+    Notification,
     Settings,
-    Main,
-    Feedback,
+    Dashboard,
+    Onboarding,
+    AudioRecording,
+    AudioTranscribing,
 }
 
 impl FromStr for AppWindowId {
@@ -25,10 +31,12 @@ impl FromStr for AppWindowId {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
-            "setup" => Self::Setup,
             "settings" => Self::Settings,
-            "main" => Self::Main,
-            "feedback" => Self::Feedback,
+            "notification" => Self::Notification,
+            "dashboard" => Self::Dashboard,
+            "onboarding" => Self::Onboarding,
+            "recording" => Self::AudioRecording,
+            "transcribing" => Self::AudioTranscribing,
             _ => return Err(format!("unknown window label: {s}")),
         })
     }
@@ -37,10 +45,12 @@ impl FromStr for AppWindowId {
 impl std::fmt::Display for AppWindowId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Setup => write!(f, "setup"),
             Self::Settings => write!(f, "settings"),
-            Self::Main => write!(f, "main"),
-            Self::Feedback => write!(f, "feedback"),
+            Self::Notification => write!(f, "notification"),
+            Self::Dashboard => write!(f, "dashboard"),
+            Self::Onboarding => write!(f, "onboarding"),
+            Self::AudioRecording => write!(f, "recording"),
+            Self::AudioTranscribing => write!(f, "transcribing"),
         }
     }
 }
@@ -56,36 +66,57 @@ impl AppWindowId {
     }
 
     pub fn activates_dock(&self) -> bool {
-        matches!(self, Self::Setup | Self::Settings | Self::Main)
+        matches!(self, Self::Onboarding | Self::Settings | Self::Dashboard)
     }
 }
 
 #[derive(Clone, Type, Deserialize)]
 pub enum ShowAppWindow {
-    Setup,
     Settings,
-    Main,
-    Feedback,
+    Notification,
+    Dashboard,
+    Onboarding,
+    AudioRecording,
+    AudioTranscribing,
 }
 
 impl ShowAppWindow {
     pub async fn show(&self, app: &AppHandle<Wry>) -> tauri::Result<WebviewWindow> {
+        let should_recreate = matches!(self, Self::AudioRecording);
         if let Some(window) = self.id(app).get(app) {
-            window.set_focus().ok();
-            return Ok(window);
+            if should_recreate {
+                window.destroy().ok();
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            } else {
+                if matches!(self, Self::AudioRecording | Self::AudioTranscribing) {
+                    #[cfg(target_os = "macos")]
+                    ensure_overlay_in_active_space(&window);
+                    if let Err(error) = reposition_audio_bar_with_monitor(&window) {
+                        warn!(
+                            target = "miaoyu_audio",
+                            window = %self.id(app),
+                            ?error,
+                            "Failed to reposition existing audio overlay"
+                        );
+                    }
+                }
+                window.show().ok();
+                window.set_focus().ok();
+                return Ok(window);
+            }
         }
 
         let _id = self.id(app);
 
         let window = match self {
-            Self::Setup => {
+            Self::Onboarding => {
                 let window = self
-                    .window_builder(app, "/setup")
+                    .window_builder(app, "/onboarding")
                     .resizable(false)
                     .maximized(false)
                     .center()
                     .focused(true)
-                    .inner_size(420.0, 360.0)
+                    .inner_size(960.0, 720.0)
                     .maximizable(false)
                     .shadow(true)
                     .build()?;
@@ -108,53 +139,50 @@ impl ShowAppWindow {
                 window.show()?;
                 window
             }
-            Self::Main => {
+            Self::Dashboard => {
                 #[cfg(target_os = "macos")]
                 let window = {
-                    use tauri::TitleBarStyle;
                     self.window_builder(app, "/")
-                        .inner_size(40.0, 8.0)
-                        .resizable(false)
+                        .resizable(true)
                         .maximized(false)
-                        .decorations(false)
-                        .transparent(true)
-                        .focused(false)
-                        .maximizable(false)
-                        .shadow(false)
+                        .center()
+                        .focused(true)
+                        .decorations(true)
+                        .transparent(false)
+                        .maximizable(true)
+                        .shadow(true)
                         .visible(false)
-                        .always_on_top(true)
-                        .title_bar_style(TitleBarStyle::Overlay)
                         .hidden_title(true)
-                        .visible_on_all_workspaces(true)
+                        .title("")
                         .build()?
                 };
 
                 #[cfg(not(target_os = "macos"))]
                 let window = self
                     .window_builder(app, "/")
-                    .inner_size(40.0, 8.0)
-                    .resizable(false)
+                    .inner_size(1024.0, 720.0)
+                    .resizable(true)
                     .maximized(false)
-                    .decorations(false)
-                    .transparent(true)
-                    .focused(false)
-                    .maximizable(false)
-                    .shadow(false)
+                    .center()
+                    .focused(true)
+                    .decorations(true)
+                    .transparent(false)
+                    .maximizable(true)
+                    .shadow(true)
                     .visible(false)
-                    .always_on_top(true)
+                    .title("")
                     .build()?;
 
-                reposition_audio_bar_with_monitor(&window, current_audio_panel_position(app))?;
                 window.show()?;
-
                 window
             }
-            Self::Feedback => {
+            Self::Notification => {
                 #[cfg(target_os = "macos")]
                 let window = {
                     use tauri::TitleBarStyle;
-                    self.window_builder(app, "/feedback")
-                        .inner_size(320.0, 48.0)
+                    let window = self
+                        .window_builder(app, "/notification")
+                        .inner_size(400.0, 96.0)
                         .resizable(false)
                         .maximized(false)
                         .decorations(false)
@@ -166,14 +194,14 @@ impl ShowAppWindow {
                         .always_on_top(true)
                         .title_bar_style(TitleBarStyle::Overlay)
                         .hidden_title(true)
-                        .visible_on_all_workspaces(true)
-                        .build()?
+                        .build()?;
+                    window
                 };
 
                 #[cfg(not(target_os = "macos"))]
                 let window = self
-                    .window_builder(app, "/feedback")
-                    .inner_size(320.0, 48.0)
+                    .window_builder(app, "/notification")
+                    .inner_size(400.0, 96.0)
                     .resizable(false)
                     .maximized(false)
                     .decorations(false)
@@ -185,11 +213,66 @@ impl ShowAppWindow {
                     .always_on_top(true)
                     .build()?;
 
-                // Feedback 窗口不立即显示，由 feedback 模块控制
+                // Notification 窗口不立即显示，由 notification 模块控制
                 window
+            }
+            Self::AudioRecording => self.build_audio_overlay(app, "/recording", 120.0, 32.0)?,
+            Self::AudioTranscribing => {
+                self.build_audio_overlay(app, "/transcribing", 120.0, 32.0)?
             }
         };
 
+        Ok(window)
+    }
+
+    fn build_audio_overlay(
+        &self,
+        app: &AppHandle<Wry>,
+        route: &str,
+        width: f64,
+        height: f64,
+    ) -> tauri::Result<WebviewWindow> {
+        #[cfg(target_os = "macos")]
+        let window = {
+            use tauri::TitleBarStyle;
+            let window = self
+                .window_builder(app, route)
+                .inner_size(width, height)
+                .resizable(false)
+                .maximized(false)
+                .decorations(false)
+                .transparent(true)
+                .focused(false)
+                .maximizable(false)
+                .shadow(false)
+                .visible(false)
+                .always_on_top(true)
+                .title_bar_style(TitleBarStyle::Overlay)
+                .hidden_title(true)
+                .visible_on_all_workspaces(true)
+                .build()?;
+
+            ensure_overlay_in_active_space(&window);
+            window
+        };
+
+        #[cfg(not(target_os = "macos"))]
+        let window = self
+            .window_builder(app, route)
+            .inner_size(width, height)
+            .resizable(false)
+            .maximized(false)
+            .decorations(false)
+            .transparent(true)
+            .focused(false)
+            .maximizable(false)
+            .shadow(false)
+            .visible(false)
+            .always_on_top(true)
+            .build()?;
+
+        reposition_audio_bar_with_monitor(&window)?;
+        window.show()?;
         Ok(window)
     }
 
@@ -209,10 +292,12 @@ impl ShowAppWindow {
 
     pub fn id(&self, _app: &AppHandle) -> AppWindowId {
         match self {
-            ShowAppWindow::Setup => AppWindowId::Setup,
+            ShowAppWindow::Notification => AppWindowId::Notification,
             ShowAppWindow::Settings => AppWindowId::Settings,
-            ShowAppWindow::Main => AppWindowId::Main,
-            ShowAppWindow::Feedback => AppWindowId::Feedback,
+            ShowAppWindow::Dashboard => AppWindowId::Dashboard,
+            ShowAppWindow::Onboarding => AppWindowId::Onboarding,
+            ShowAppWindow::AudioRecording => AppWindowId::AudioRecording,
+            ShowAppWindow::AudioTranscribing => AppWindowId::AudioTranscribing,
         }
     }
 }
@@ -227,30 +312,60 @@ pub fn set_theme(window: tauri::Window, theme: AppTheme) {
     });
 }
 
-pub fn reposition_audio_bars(app: &AppHandle<Wry>, position: AudioFlowPanelPosition) {
-    if let Some(window) = AppWindowId::Main.get(app) {
-        if let Err(error) = reposition_audio_bar_with_monitor(&window, position) {
-            warn!(
-                target = "miaoyu_audio",
-                ?error,
-                "Failed to reposition Main window",
-            );
+#[tauri::command]
+#[specta::specta]
+pub fn take_pending_navigation(app: AppHandle) -> Option<String> {
+    let state = app.state::<AppState>();
+    let mut pending = state.pending_navigation.lock().unwrap();
+    pending.take()
+}
+
+pub fn reposition_audio_bars(app: &AppHandle<Wry>) {
+    for id in [AppWindowId::AudioRecording, AppWindowId::AudioTranscribing] {
+        if let Some(window) = id.get(app) {
+            if let Err(error) = reposition_audio_bar_with_monitor(&window) {
+                warn!(
+                    target = "miaoyu_audio",
+                    window = %id.to_string(),
+                    ?error,
+                    "Failed to reposition audio overlay window",
+                );
+            }
         }
     }
 }
 
-fn current_audio_panel_position(app: &AppHandle<Wry>) -> AudioFlowPanelPosition {
-    SettingsStore::get(app)
-        .ok()
-        .flatten()
-        .map(|settings| settings.audio_flow_panel_position)
-        .unwrap_or(AudioFlowPanelPosition::BottomCenter)
+pub async fn sync_audio_overlay(app: &AppHandle<Wry>, state: AudioState) -> tauri::Result<()> {
+    let overlays = [AppWindowId::AudioRecording, AppWindowId::AudioTranscribing];
+
+    let target = match state {
+        AudioState::Idle => None,
+        AudioState::Recording => Some(ShowAppWindow::AudioRecording),
+        AudioState::Transcribing => Some(ShowAppWindow::AudioTranscribing),
+    };
+
+    for id in overlays {
+        let should_keep = target
+            .as_ref()
+            .map(|variant| variant.id(app) == id)
+            .unwrap_or(false);
+        if should_keep {
+            continue;
+        }
+
+        if let Some(window) = id.get(app) {
+            window.hide().ok();
+        }
+    }
+
+    if let Some(target_variant) = target {
+        target_variant.show(app).await?;
+    }
+
+    Ok(())
 }
 
-fn reposition_audio_bar_with_monitor(
-    window: &WebviewWindow,
-    position: AudioFlowPanelPosition,
-) -> tauri::Result<()> {
+fn reposition_audio_bar_with_monitor(window: &WebviewWindow) -> tauri::Result<()> {
     let app = window.app_handle();
     let monitor = app
         .primary_monitor()?
@@ -261,73 +376,74 @@ fn reposition_audio_bar_with_monitor(
     let logical_pos = PhysicalPosition::new(pos.x, pos.y);
     let logical_size = PhysicalSize::new(size.width, size.height);
 
-    position_audio_bar(window, logical_pos, logical_size, position)
+    position_audio_bar(window, logical_pos, logical_size)
 }
+
+#[cfg(target_os = "macos")]
+fn ensure_overlay_in_active_space(window: &WebviewWindow) {
+    let window_clone = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let result = ns::try_catch(|| unsafe {
+                if let Ok(ns_window_ptr) = window_clone.ns_window() {
+                    let ns_window = &*(ns_window_ptr as *mut NSWindow);
+                    let mut behavior = ns_window.collectionBehavior();
+                    behavior.remove(NSWindowCollectionBehavior::CanJoinAllSpaces);
+                    behavior.insert(NSWindowCollectionBehavior::MoveToActiveSpace);
+                    ns_window.setCollectionBehavior(behavior);
+                }
+            });
+
+            if let Err(error) = result {
+                warn!(
+                    target = "miaoyu_audio",
+                    reason = ?error.reason(),
+                    "Failed to update overlay space behavior"
+                );
+            }
+        })
+        .ok();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn ensure_overlay_in_active_space(_window: &WebviewWindow) {}
 
 #[cfg(target_os = "macos")]
 fn position_audio_bar(
     window: &WebviewWindow,
     monitor_pos: PhysicalPosition<i32>,
     monitor_size: tauri::PhysicalSize<u32>,
-    position: AudioFlowPanelPosition,
 ) -> tauri::Result<()> {
     let window_size = window.outer_size()?;
-    let margin = 16;
+    let margin = AUDIO_BAR_BOTTOM_MARGIN;
     let scale_factor = window.scale_factor()?;
 
     let centered_x = monitor_pos.x + (monitor_size.width as i32 - window_size.width as i32) / 2;
 
-    let y = match position {
-        AudioFlowPanelPosition::BottomCenter => {
-            // Use visible frame if available (excludes Dock area)
-            if let Some(screen) = ns::Screen::main() {
-                let visible = screen.visible_frame();
-                let frame = screen.frame();
+    // Use visible frame if available (excludes Dock area)
+    let y = if let Some(screen) = ns::Screen::main() {
+        let visible = screen.visible_frame();
+        let frame = screen.frame();
 
-                // Convert NSScreen coordinates (origin: bottom-left) to Tauri coordinates (origin: top-left)
-                // visible.origin.y is the distance from screen bottom to visible area bottom
-                let visible_bottom_from_top = (frame.size.height - visible.origin.y) * scale_factor;
+        // Convert NSScreen coordinates (origin: bottom-left) to Tauri coordinates (origin: top-left)
+        // visible.origin.y is the distance from screen bottom to visible area bottom
+        let visible_bottom_from_top = (frame.size.height - visible.origin.y) * scale_factor;
 
-                tracing::debug!(
-                    target: "miaoyu_audio",
-                    visible_bottom = visible_bottom_from_top,
-                    frame_height = frame.size.height,
-                    visible_y = visible.origin.y,
-                    visible_height = visible.size.height,
-                    scale = scale_factor,
-                    "Positioning with Dock awareness"
-                );
+        tracing::debug!(
+            target: "miaoyu_audio",
+            visible_bottom = visible_bottom_from_top,
+            frame_height = frame.size.height,
+            visible_y = visible.origin.y,
+            visible_height = visible.size.height,
+            scale = scale_factor,
+            "Positioning with Dock awareness"
+        );
 
-                // Position above the visible frame bottom (above Dock if visible)
-                (visible_bottom_from_top as i32) - window_size.height as i32 - margin
-            } else {
-                // Fallback: use monitor size (screen bottom)
-                monitor_pos.y + monitor_size.height as i32 - window_size.height as i32 - margin
-            }
-        }
-        AudioFlowPanelPosition::TopCenter => {
-            // Top position: account for menu bar via visible frame
-            if let Some(screen) = ns::Screen::main() {
-                let visible = screen.visible_frame();
-                let frame = screen.frame();
-
-                // visible.origin.y + visible.size.height is the top of visible area from screen bottom
-                // Convert to top-left origin
-                let visible_top_from_top =
-                    (frame.size.height - (visible.origin.y + visible.size.height)) * scale_factor;
-
-                tracing::debug!(
-                    target: "miaoyu_audio",
-                    visible_top = visible_top_from_top,
-                    "Positioning below menu bar"
-                );
-
-                (visible_top_from_top as i32) + margin
-            } else {
-                // Fallback
-                monitor_pos.y + margin
-            }
-        }
+        // Position above the visible frame bottom (above Dock if visible)
+        (visible_bottom_from_top as i32) - window_size.height as i32 - margin
+    } else {
+        // Fallback: use monitor size (screen bottom)
+        monitor_pos.y + monitor_size.height as i32 - window_size.height as i32 - margin
     };
 
     let target_position = PhysicalPosition::new(centered_x, y);
@@ -346,19 +462,13 @@ fn position_audio_bar(
     window: &WebviewWindow,
     monitor_pos: PhysicalPosition<i32>,
     monitor_size: tauri::PhysicalSize<u32>,
-    position: AudioFlowPanelPosition,
 ) -> tauri::Result<()> {
     let window_size = window.outer_size()?;
-    let margin = 16;
+    let margin = AUDIO_BAR_BOTTOM_MARGIN;
 
     let centered_x = monitor_pos.x + (monitor_size.width as i32 - window_size.width as i32) / 2;
 
-    let y = match position {
-        AudioFlowPanelPosition::BottomCenter => {
-            monitor_pos.y + monitor_size.height as i32 - window_size.height as i32 - margin
-        }
-        AudioFlowPanelPosition::TopCenter => monitor_pos.y + margin,
-    };
+    let y = monitor_pos.y + monitor_size.height as i32 - window_size.height as i32 - margin;
 
     let target_position = PhysicalPosition::new(centered_x, y);
     let window_clone = window.clone();
@@ -369,134 +479,6 @@ fn position_audio_bar(
         .ok();
 
     Ok(())
-}
-
-// 内部函数：调整窗口大小并保持位置
-pub fn resize_main_window(
-    window: &WebviewWindow,
-    app: &AppHandle<Wry>,
-    width: f64,
-    height: f64,
-) -> Result<(), String> {
-    let old_size = window.outer_size().map_err(|e| e.to_string())?;
-    let old_pos = window.outer_position().map_err(|e| e.to_string())?;
-
-    let panel_position = current_audio_panel_position(app);
-
-    tracing::info!(
-        target: "miaoyu_audio",
-        panel_position = ?panel_position,
-        old_width = old_size.width,
-        old_height = old_size.height,
-        old_x = old_pos.x,
-        old_y = old_pos.y,
-        new_width = width,
-        new_height = height,
-        "Window state before resize"
-    );
-
-    // For bottom panel: window should expand UPWARD (top edge moves up, bottom edge stays)
-    // For top panel: window should expand DOWNWARD (top edge stays, bottom edge moves down)
-    let (anchor_y, is_bottom) = match panel_position {
-        AudioFlowPanelPosition::BottomCenter => {
-            // Keep bottom edge Y fixed, expand upward
-            let bottom_y = old_pos.y + old_size.height as i32;
-            tracing::info!(
-                target: "miaoyu_audio",
-                bottom_y = bottom_y,
-                "Bottom panel: keeping bottom edge fixed"
-            );
-            (bottom_y, true)
-        }
-        AudioFlowPanelPosition::TopCenter => {
-            // Keep top edge Y fixed, expand downward
-            tracing::info!(
-                target: "miaoyu_audio",
-                top_y = old_pos.y,
-                "Top panel: keeping top edge fixed"
-            );
-            (old_pos.y, false)
-        }
-    };
-
-    // Calculate horizontal center
-    let center_x = old_pos.x + (old_size.width as i32) / 2;
-
-    // Get scale factor for HiDPI calculation
-    let scale_factor = window.scale_factor().map_err(|e| e.to_string())?;
-    tracing::info!(
-        target: "miaoyu_audio",
-        scale_factor = scale_factor,
-        "Display scale factor"
-    );
-
-    // Calculate physical size (logical size * scale_factor)
-    let new_physical_width = (width * scale_factor) as u32;
-    let new_physical_height = (height * scale_factor) as u32;
-
-    tracing::info!(
-        target: "miaoyu_audio",
-        new_physical_width = new_physical_width,
-        new_physical_height = new_physical_height,
-        "Calculated physical size"
-    );
-
-    // Calculate new position BEFORE resizing (to avoid timing issues)
-    let new_x = center_x - (new_physical_width as i32) / 2;
-    let new_y = if is_bottom {
-        anchor_y - new_physical_height as i32
-    } else {
-        anchor_y
-    };
-
-    tracing::info!(
-        target: "miaoyu_audio",
-        old_x = old_pos.x,
-        old_y = old_pos.y,
-        new_x = new_x,
-        new_y = new_y,
-        anchor_y = anchor_y,
-        "Position change (bottom edge should stay at anchor_y)"
-    );
-
-    // Apply size and position atomically on main thread
-    let new_size = LogicalSize::new(width, height);
-    let new_pos = PhysicalPosition::new(new_x, new_y);
-    let window_clone = window.clone();
-
-    window
-        .run_on_main_thread(move || {
-            // Set position FIRST, then size - this prevents visual jump
-            let _ = window_clone.set_position(new_pos);
-            let _ = window_clone.set_size(new_size);
-        })
-        .ok();
-
-    // Don't set focus - global mouse tracking handles hover detection without focus
-
-    tracing::info!(
-        target: "miaoyu_audio",
-        "Main window resize completed"
-    );
-
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn resize_audio_panel(app: AppHandle<Wry>, width: f64, height: f64) -> Result<(), String> {
-    tracing::info!(
-        target: "miaoyu_audio",
-        width = width,
-        height = height,
-        "Resizing Main window"
-    );
-
-    let window = AppWindowId::Main
-        .get(&app)
-        .ok_or_else(|| "Main window not found".to_string())?;
-
-    resize_main_window(&window, &app, width, height)
 }
 
 /// Start observing screen parameter changes (Dock show/hide, etc.)
@@ -531,8 +513,7 @@ pub fn start_screen_observer(app: AppHandle<Wry>) {
                             "Screen visible frame changed - repositioning audio bars"
                         );
 
-                        let position = current_audio_panel_position(&app);
-                        reposition_audio_bars(&app, position);
+                        reposition_audio_bars(&app);
                     }
                 }
 

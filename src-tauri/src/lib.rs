@@ -1,43 +1,69 @@
 mod audio;
 mod clipboard;
-mod feedback;
+mod history;
 mod hotkeys;
 mod llm;
-#[cfg(target_os = "macos")]
-mod mouse_tracker;
-
-#[cfg(not(target_os = "macos"))]
-mod mouse_tracker {
-    use tauri::{AppHandle, Wry};
-
-    pub fn start_mouse_tracking(_app: AppHandle<Wry>) {}
-}
+mod models;
+mod notification;
 mod permissions;
 mod settings;
 mod tray;
 mod windows;
 
-use crate::audio::{cancel_dictating, start_dictating, stop_dictating, AudioState};
+use crate::audio::{
+    cancel_dictating, dictating::DictatingStream, download_offline_models,
+    get_offline_models_status, start_dictating, start_voice_diary, stop_dictating,
+};
+use crate::history::HistoryKind;
 use crate::settings::SettingsStore;
 use crate::windows::{AppWindowId, ShowAppWindow};
+use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::str::FromStr;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_updater::UpdaterExt;
+use tokio::sync::Mutex as AsyncMutex;
+
+#[derive(Clone, Serialize, Deserialize, Type, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum AudioState {
+    Idle,
+    Recording,
+    Transcribing,
+}
+
+pub struct AudioRuntimeState {
+    pub state: AudioState,
+    pub dictating_stream: Option<DictatingStream>,
+    pub history_kind: HistoryKind,
+}
+
+pub struct AppState {
+    pub audio: AsyncMutex<AudioRuntimeState>,
+    pub pending_navigation: Mutex<Option<String>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            audio: AsyncMutex::new(AudioRuntimeState {
+                state: AudioState::Idle,
+                dictating_stream: None,
+                history_kind: HistoryKind::Dictation,
+            }),
+            pending_navigation: Mutex::new(None),
+        }
+    }
+}
 
 /// 检查是否已配置 API 密钥
 /// 返回 true 表示需要配置
 fn check_api_config(app: &tauri::AppHandle) -> bool {
-    let settings = SettingsStore::get(app).ok().flatten();
-
-    // 检查 LLM 配置（用户设置或环境变量）
-    let has_llm = settings
-        .as_ref()
-        .and_then(|s| s.llm_api_key.as_ref())
-        .is_some()
-        || std::env::var("DEEPSEEK_API_KEY").is_ok();
-
-    // 如果两者都没配置，返回 true（需要配置）
-    !has_llm
+    !llm::has_configured_api_key(app)
 }
 
 pub type EnvFilteredRegistry =
@@ -62,27 +88,44 @@ pub async fn run(_logging_handle: LoggingHandle) {
     let specta_builder = tauri_specta::Builder::new()
         .commands(tauri_specta::collect_commands![
             windows::set_theme,
-            windows::resize_audio_panel,
+            windows::take_pending_navigation,
             permissions::request_permission,
             permissions::check_os_permissions,
             permissions::open_permission_settings,
             hotkeys::set_hotkey,
             start_dictating,
+            start_voice_diary,
             cancel_dictating,
             stop_dictating,
-            feedback::show_feedback,
-            feedback::hide_feedback,
+            notification::show_notification,
+            notification::hide_notification,
             settings::get_autostart_enabled,
             settings::set_autostart_enabled,
+            settings::set_onboarding_completed,
+            llm::test_llm_api_key,
+            models::get_supported_models,
+            models::get_models_store,
+            models::set_active_text_model,
+            models::update_text_model_credentials,
+            models::set_active_asr_model,
+            models::update_asr_credentials,
+            get_offline_models_status,
+            download_offline_models,
+            history::list_history_entries,
+            history::add_history_entry,
+            history::delete_history_entry,
+            history::clear_history_entries,
+            history::get_history_stats,
+            history::load_history_audio,
         ])
         .events(tauri_specta::collect_events![
             hotkeys::OnEscapePress,
-            settings::AudioFlowPanelPositionChanged,
-            feedback::ShowFeedback,
+            notification::ShowNotification,
+            audio::OnTranscribingStage,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .typ::<hotkeys::HotkeysStore>()
-        .typ::<settings::SettingsStore>()
+        .typ::<SettingsStore>()
         .typ::<AudioState>();
 
     #[cfg(debug_assertions)]
@@ -98,7 +141,11 @@ pub async fn run(_logging_handle: LoggingHandle) {
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default();
 
+    let resume_flag = Arc::new(AtomicBool::new(false));
+    let resume_flag_run = Arc::clone(&resume_flag);
+
     builder
+        .manage(AppState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -115,26 +162,29 @@ pub async fn run(_logging_handle: LoggingHandle) {
             specta_builder.mount_events(&app_handle);
             hotkeys::init(&app_handle);
             settings::init(&app_handle);
-            settings::register_listeners(&app_handle);
+            let onboarding_completed = settings::is_onboarding_completed(&app_handle);
+            if onboarding_completed {
+                tray::create_tray(&app_handle).ok();
+            }
             let permissions = permissions::check_os_permissions(false);
 
             tokio::spawn({
                 let app = app_handle.clone();
                 async move {
-                    // 检查权限
-                    if !permissions.microphone.permitted() || !permissions.accessibility.permitted()
-                    {
-                        let _ = ShowAppWindow::Setup.show(&app).await;
+                    let onboarding_completed = settings::is_onboarding_completed(&app);
+                    let permissions_ready = permissions.microphone.permitted()
+                        && permissions.accessibility.permitted();
+                    if onboarding_completed && permissions_ready {
+                        let _ = ShowAppWindow::Dashboard.show(&app).await;
+                    } else {
+                        let _ = ShowAppWindow::Onboarding.show(&app).await;
                     }
 
                     // 检查是否已配置 API 密钥（仅用于日志记录）
                     let _needs_config = check_api_config(&app);
                     // 有编译时默认值，不需要提示
 
-                    let _ = ShowAppWindow::Main.show(&app).await;
-
-                    // Start global mouse tracking for hover detection (works without focus)
-                    mouse_tracker::start_mouse_tracking(app.clone());
+                    let _ = windows::sync_audio_overlay(&app, AudioState::Idle).await;
 
                     // Start observing screen changes (Dock show/hide) to reposition windows
                     windows::start_screen_observer(app.clone());
@@ -160,8 +210,6 @@ pub async fn run(_logging_handle: LoggingHandle) {
                     }
                 }
             });
-
-            tray::create_tray(&app_handle).unwrap();
 
             Ok(())
         })
@@ -193,7 +241,30 @@ pub async fn run(_logging_handle: LoggingHandle) {
         })
         .build(tauri_context)
         .expect("error while running tauri application")
-        .run(move |_handle, event| match event {
+        .run(move |handle, event| match event {
+            tauri::RunEvent::Resumed { .. } => {
+                if !resume_flag_run.swap(true, Ordering::SeqCst) {
+                    let app = handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if settings::is_onboarding_completed(&app) {
+                            let _ = ShowAppWindow::Dashboard.show(&app).await;
+                        } else {
+                            let _ = ShowAppWindow::Onboarding.show(&app).await;
+                        }
+                    });
+                }
+            }
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => {
+                let app = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    if settings::is_onboarding_completed(&app) {
+                        let _ = ShowAppWindow::Dashboard.show(&app).await;
+                    } else {
+                        let _ = ShowAppWindow::Onboarding.show(&app).await;
+                    }
+                });
+            }
             #[cfg(target_os = "macos")]
             tauri::RunEvent::ExitRequested { code, api, .. } => {
                 if code.is_none() {
