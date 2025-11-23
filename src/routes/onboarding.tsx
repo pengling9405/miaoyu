@@ -188,10 +188,19 @@ function RouteComponent() {
 		}
 	};
 
-	const handlePermissionAction = (
+	const handlePermissionAction = async (
 		permission: OSPermission,
 		status: string | undefined,
 	) => {
+		if (permission === "accessibility") {
+			try {
+				await requestPermission.mutateAsync(permission);
+			} catch (error) {
+				console.error("Failed to request accessibility permission:", error);
+			}
+			openPermissionSettings.mutate(permission);
+			return;
+		}
 		if (status === "denied") {
 			openPermissionSettings.mutate(permission);
 		} else {
