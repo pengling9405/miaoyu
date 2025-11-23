@@ -335,7 +335,7 @@ jobs:
             "C:\t\$env:TARGET\release\deps",
             "src-tauri\target\$env:TARGET\release",
             "src-tauri\target\$env:TARGET\release\deps",
-            "src-tauri\bin",
+            "src-tauri\bin"
           ) | Where-Object { Test-Path $_ } | Select-Object -Unique
 
           Write-Host "Search candidates:"
