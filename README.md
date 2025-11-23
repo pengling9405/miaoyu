@@ -7,30 +7,19 @@
     智能语音输入，妙语亦可生花。
   </p>
 </p>
-
 <br/>
+<div align="center">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" />
+  </a>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey" />
+  <img src="https://img.shields.io/badge/release-v1.0.0--pre-blueviolet" />
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" />
+</div>
 
-[![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
-![Platform](https://img.shields.io/badge/platform-macOS%20|%20Windows%20|%20Linux-lightgrey)
-![Release](https://img.shields.io/badge/release-v0.2.0-orange)
-![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)
+妙语默认在本地推理完成整个 ASR 流程，确保隐私、安全和低延迟以及智能AI 润色，让你的语音输入妙语生花。
 
----
-
-## 🪶 简介
-
-**妙语** 智能语音输入，妙语亦可生花。
-与传统云端语音服务不同，妙语默认在本地推理完成整个 ASR 流程，确保隐私、安全和低延迟以及智能AI 润色，让你的语音输入妙语生花。
-
----
-
-## ✨ 核心能力
-
-| 能力 | 说明 |
-|------|------|
-| 📴 **全离线语音识别** | 内置 Paraformer Small + sherpa-rs，在本地 CPU 上完成推理，无需网络。 |
-| ⌨️ **跨应用输入** | 通过全局快捷键触发录音，识别结果自动写入剪贴板并粘贴到光标所在位置。 |
----
+<img src="https://raw.githubusercontent.com/pengling9405/miaoyu/refs/heads/main/src-tauri/assets/landing.png">
 
 ## 🚀 快速开始
 
