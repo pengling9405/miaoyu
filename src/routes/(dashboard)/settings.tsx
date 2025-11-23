@@ -1,29 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-	Keyboard,
-	Mic,
-	Notebook,
-	Palette,
-	PersonStanding,
-	Power,
-} from "lucide-react";
+import { Keyboard, Notebook, Palette, Power } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useCheckPermissions, useOpenPermissionSettings } from "~/hooks/use-permissions";
 import { Switch } from "~/components/animate/switch";
 import { Dashboard } from "~/components/layouts/dashboard";
 import { HotkeySetting } from "~/components/settings/hotkey";
 import { SettingRow } from "~/components/settings/row";
 import { ThemeToggle } from "~/components/settings/theme-toggle";
-import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { DEFAULT_DIARY_HOTKEY } from "~/constants/hotkeys";
-import type {
-	Hotkey,
-	HotkeyAction,
-	OSPermission,
-	OSPermissionStatus,
-} from "~/lib/tauri";
+import type { Hotkey, HotkeyAction } from "~/lib/tauri";
 import { commands } from "~/lib/tauri";
 import { hotkeysStore } from "~/store";
 
@@ -33,8 +18,6 @@ export const Route = createFileRoute("/(dashboard)/settings")({
 
 function RouteComponent() {
 	const hotkeysQuery = hotkeysStore.useQuery();
-	const permissionsQuery = useCheckPermissions(true);
-	const openPermissionSettings = useOpenPermissionSettings();
 
 	// 开机启动
 	const [autostartEnabled, setAutostartEnabled] = useState(false);
@@ -55,27 +38,12 @@ function RouteComponent() {
 		void loadAutostartStatus();
 	}, []);
 
-	useEffect(() => {
-		const id = window.setInterval(() => {
-			void permissionsQuery.refetch();
-		}, 2000);
-		return () => window.clearInterval(id);
-	}, [permissionsQuery.refetch]);
-
 	const handleAutostartChange = async (checked: boolean) => {
 		try {
 			await commands.setAutostartEnabled(checked);
 			setAutostartEnabled(checked);
 		} catch (error) {
 			console.error("Failed to set autostart:", error);
-		}
-	};
-
-	const handleOpenPermissionSettings = async (permission: OSPermission) => {
-		try {
-			await openPermissionSettings.mutateAsync(permission);
-		} catch (error) {
-			console.error("Failed to open permission settings:", error);
 		}
 	};
 
@@ -101,40 +69,6 @@ function RouteComponent() {
 			action: <ThemeToggle />,
 		},
 	];
-
-	const permissionRows = [
-		{
-			id: "microphone",
-			title: "麦克风权限",
-			description: "用于录音转写，系统弹窗同意后即可。",
-			icon: <Mic className="size-4" />,
-			status: permissionsQuery.data?.microphone,
-			permission: "microphone" as const,
-		},
-		{
-			id: "accessibility",
-			title: "辅助功能权限",
-			description: "首次安装需在“隐私与安全性 › 辅助功能”手动勾选“妙语”，用于自动粘贴与快捷键捕捉。",
-			icon: <PersonStanding className="size-4" />,
-			status: permissionsQuery.data?.accessibility,
-			permission: "accessibility" as const,
-		},
-	];
-
-	const renderPermissionBadge = (status?: OSPermissionStatus) => {
-		switch (status) {
-			case "granted":
-				return <Badge>已授权</Badge>;
-			case "notNeeded":
-				return <Badge variant="secondary">系统无需</Badge>;
-			case "empty":
-				return <Badge variant="secondary">待授权</Badge>;
-			case "denied":
-				return <Badge variant="destructive">未授权</Badge>;
-			default:
-				return <Badge variant="secondary">检查中…</Badge>;
-		}
-	};
 
 	const hotkeyRows = [
 		{
@@ -215,46 +149,6 @@ function RouteComponent() {
 											description={row.description}
 											action={row.action}
 											icon={row.icon}
-										/>
-									</li>
-								))}
-							</ul>
-						</Card>
-					</section>
-
-					<section className="space-y-2.5">
-						<h2 className="text-base font-medium">权限</h2>
-						<Card className="px-4 py-0 gap-0">
-							<ul className="divide-y divide-border py-4">
-								{permissionRows.map((row) => (
-									<li key={row.id} className="py-4 first:pt-0 last:pb-0">
-										<SettingRow
-											title={row.title}
-											description={row.description}
-											icon={row.icon}
-											action={
-												<div className="flex items-center gap-2">
-													{renderPermissionBadge(row.status)}
-													<Button
-														variant="outline"
-														size="sm"
-														disabled={openPermissionSettings.isPending}
-														onClick={() =>
-															void handleOpenPermissionSettings(row.permission)
-														}
-													>
-														打开系统设置
-													</Button>
-													<Button
-														variant="ghost"
-														size="sm"
-														disabled={permissionsQuery.isFetching}
-														onClick={() => void permissionsQuery.refetch()}
-													>
-														刷新状态
-													</Button>
-												</div>
-											}
 										/>
 									</li>
 								))}
