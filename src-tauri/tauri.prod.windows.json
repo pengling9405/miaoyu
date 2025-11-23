@@ -16,10 +16,7 @@
     "resources": [
       "onnxruntime.dll",
       "sherpa-onnx-c-api.dll",
-      "onnxruntime_providers_shared.dll",
-      "VCRUNTIME140.dll",
-      "VCRUNTIME140_1.dll",
-      "MSVCP140.dll"
+      "onnxruntime_providers_shared.dll"
     ],
     "icon": ["icons/icon.ico"],
     "windows": {
