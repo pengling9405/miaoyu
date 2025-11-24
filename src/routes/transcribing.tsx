@@ -33,15 +33,17 @@ function RouteComponent() {
 	const dots = Array.from({ length: 4 }, (_, i) => i);
 
 	return (
-		<div className="flex h-screen w-screen items-center justify-center px-1">
+		<div className="flex h-screen w-screen items-center justify-center">
 			<MovingLabel
-				duration={3500}
 				borderRadius="1.75rem"
-				className="bg-background border border-border w-full h-8 rounded-full shadow-sm flex items-center justify-center"
-				containerClassName="w-[120px] h-8.5"
+				duration={3500}
+				className="flex w-full h-full overflow-hidden items-center justify-center gap-2 rounded-full border border-border bg-background shadow-sm"
+				containerClassName="w-30 h-8"
 			>
-				<div className="flex items-center gap-2 text-xs font-medium text-foreground/40">
-					<span className="shimmer shimmer-speed-200">{label}</span>
+				<div className="flex items-center gap-1">
+					<span className="shimmer shimmer-speed-200 我们这里的情况是这样的。text-xs">
+						{label}
+					</span>
 					<div className="flex items-center gap-1.5">
 						{dots.map((index) => (
 							<span
