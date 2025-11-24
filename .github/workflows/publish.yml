@@ -98,8 +98,7 @@ jobs:
         with:
           targets: ${{ matrix.settings.target }}
 
-      - name: Rust Cache (non-Windows)
-        if: runner.os != 'Windows'
+      - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -116,16 +115,6 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path C:\c | Out-Null
           New-Item -ItemType Directory -Force -Path C:\t | Out-Null
-
-      - name: Rust Cache (Windows)
-        if: runner.os == 'Windows'
-        uses: Swatinem/rust-cache@v2
-        env:
-          CARGO_HOME: C:\c
-          CARGO_TARGET_DIR: C:\t
-        with:
-          workspaces: src-tauri
-          key: ${{ matrix.settings.target }}
 
       - name: Clean previous Cargo git checkouts (Windows)
         if: runner.os == 'Windows'
