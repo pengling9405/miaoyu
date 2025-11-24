@@ -98,7 +98,8 @@ jobs:
         with:
           targets: ${{ matrix.settings.target }}
 
-      - name: Rust Cache
+      - name: Rust Cache (non-Windows)
+        if: runner.os != 'Windows'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -116,12 +117,27 @@ jobs:
           New-Item -ItemType Directory -Force -Path C:\c | Out-Null
           New-Item -ItemType Directory -Force -Path C:\t | Out-Null
 
+      - name: Rust Cache (Windows; short dirs)
+        if: runner.os == 'Windows'
+        uses: Swatinem/rust-cache@v2
+        env:
+          CARGO_HOME: C:\c
+          CARGO_TARGET_DIR: C:\t
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.settings.target }}
+
       - name: Clean previous Cargo git checkouts (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $p = "$env:USERPROFILE\.cargo\git\checkouts"
-          if (Test-Path $p) { Remove-Item -Recurse -Force $p }
+          $paths = @(
+            "$env:USERPROFILE\.cargo\git\checkouts",
+            "C:\c\git\checkouts"
+          )
+          foreach ($p in $paths) {
+            if (Test-Path $p) { Remove-Item -Recurse -Force $p }
+          }
 
       - name: Create Apple API key file
         if: matrix.settings.os == 'macOS'
