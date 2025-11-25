@@ -60,6 +60,27 @@ async fn start_recording(app: AppHandle, history_kind: HistoryKind) -> Result<()
         guard.dictating_stream = None;
         guard.history_kind = history_kind;
     }
+
+    let stream = match DictatingStream::new() {
+        Ok(stream) => stream,
+        Err(error) => {
+            set_idle_state(&app).await;
+            let _ = notification::show_notification(
+                app.clone(),
+                format!("启动录音失败：{error}"),
+                NotificationType::Error,
+                None,
+            )
+            .await;
+            return Err(error);
+        }
+    };
+
+    {
+        let mut guard = state.audio.lock().await;
+        guard.dictating_stream = Some(stream);
+    }
+
     hotkeys::set_escape_shortcut_enabled(&app, true);
 
     if let Some(window) = AppWindowId::Dashboard.get(&app) {
@@ -87,19 +108,6 @@ async fn start_recording(app: AppHandle, history_kind: HistoryKind) -> Result<()
             error = %error,
             "播放开始录音音效失败"
         );
-    }
-
-    let stream = match DictatingStream::new() {
-        Ok(stream) => stream,
-        Err(error) => {
-            set_idle_state(&app).await;
-            return Err(error);
-        }
-    };
-
-    {
-        let mut guard = state.audio.lock().await;
-        guard.dictating_stream = Some(stream);
     }
 
     Ok(())

@@ -28,7 +28,12 @@ impl DictatingStream {
         let host = cpal::default_host();
         let device = host
             .default_input_device()
-            .ok_or_else(|| "未找到默认音频输入设备".to_string())?;
+            .or_else(|| {
+                host.input_devices()
+                    .ok()
+                    .and_then(|mut devices| devices.next())
+            })
+            .ok_or_else(|| "未找到可用的音频输入设备".to_string())?;
         let config = device
             .default_input_config()
             .map_err(|e| format!("获取麦克风配置失败: {e}"))?;

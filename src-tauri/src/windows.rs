@@ -256,6 +256,14 @@ impl ShowAppWindow {
                 .build()?;
 
             ensure_overlay_in_active_space(&window);
+            if let Err(error) = reposition_audio_bar_with_monitor(&window) {
+                warn!(
+                    target = "miaoyu_audio",
+                    window = %self.id(app),
+                    ?error,
+                    "Failed to position audio overlay window",
+                );
+            }
             window
         };
 
@@ -274,7 +282,14 @@ impl ShowAppWindow {
             .always_on_top(true)
             .build()?;
 
-        reposition_audio_bar_with_monitor(&window)?;
+        if let Err(error) = reposition_audio_bar_with_monitor(&window) {
+            warn!(
+                target = "miaoyu_audio",
+                window = %self.id(app),
+                ?error,
+                "Failed to position audio overlay window",
+            );
+        }
         window.show()?;
         Ok(window)
     }
