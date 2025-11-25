@@ -148,11 +148,11 @@ jobs:
           restore-keys: |
             sccache-${{ matrix.settings.target }}-
 
-      - name: Setup sccache (Windows)
+      - name: Install sccache (Windows)
         if: runner.os == 'Windows'
-        uses: mozilla-actions/sccache@v0.0.3
-        with:
-          version: v0.5.4
+        shell: pwsh
+        run: |
+          choco install sccache --version=0.5.4 -y
 
       - name: Create Apple API key file
         if: matrix.settings.os == 'macOS'
