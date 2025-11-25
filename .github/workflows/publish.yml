@@ -139,6 +139,21 @@ jobs:
             if (Test-Path $p) { Remove-Item -Recurse -Force $p }
           }
 
+      - name: Restore sccache (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: C:\sccache
+          key: sccache-${{ matrix.settings.target }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            sccache-${{ matrix.settings.target }}-
+
+      - name: Setup sccache (Windows)
+        if: runner.os == 'Windows'
+        uses: mozilla-actions/sccache@v0.0.3
+        with:
+          version: v0.5.4
+
       - name: Create Apple API key file
         if: matrix.settings.os == 'macOS'
         run: printf '%s' "${{ secrets.APPLE_API_KEY_FILE }}" > api.p8
@@ -185,10 +200,13 @@ jobs:
           CARGO_TARGET_DIR: C:\t
           CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-Ctarget-feature=+crt-static"
           CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS: "-Ctarget-feature=+crt-static"
-          CARGO_PROFILE_RELEASE_LTO: thin
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 8
+          CARGO_PROFILE_RELEASE_LTO: off
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 16
           SHERPA_BUILD_DEBUG: "1"
           SHERPA_BUILD_SHARED_LIBS: "1"
+          RUSTC_WRAPPER: sccache
+          SCCACHE_DIR: C:\sccache
+          SCCACHE_CACHE_SIZE: 10G
         run: cargo build --manifest-path src-tauri/Cargo.toml --release --target ${{ matrix.settings.target }} --verbose
 
       - name: Build Tauri app (.app only)
@@ -385,12 +403,20 @@ jobs:
           CARGO_TARGET_DIR: C:\t
           CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-Ctarget-feature=+crt-static"
           CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS: "-Ctarget-feature=+crt-static"
-          CARGO_PROFILE_RELEASE_LTO: thin
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 8
+          CARGO_PROFILE_RELEASE_LTO: off
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 16
           SHERPA_BUILD_DEBUG: "1"
           SHERPA_BUILD_SHARED_LIBS: "1"
+          RUSTC_WRAPPER: sccache
+          SCCACHE_DIR: C:\sccache
+          SCCACHE_CACHE_SIZE: 10G
         run: |
           bun tauri build --target ${{ matrix.settings.target }} --config src-tauri/tauri.prod.windows.json
+
+      - name: sccache stats (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: sccache --show-stats
 
       - name: Remove Apple API key file
         if: matrix.settings.os == 'macOS'
