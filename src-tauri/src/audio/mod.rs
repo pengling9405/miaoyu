@@ -84,11 +84,11 @@ async fn start_recording(app: AppHandle, history_kind: HistoryKind) -> Result<()
     hotkeys::set_escape_shortcut_enabled(&app, true);
 
     if let Some(window) = AppWindowId::Dashboard.get(&app) {
-        if let Err(error) = window.destroy() {
+        if let Err(error) = window.hide() {
             warn!(
                 target = "miaoyu_audio",
                 error = %error,
-                "关闭 Dashboard 窗口失败"
+                "隐藏 Dashboard 窗口失败"
             );
         }
     }
